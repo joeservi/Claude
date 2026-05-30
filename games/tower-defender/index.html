@@ -46,14 +46,15 @@
 <body>
 <canvas id="c"></canvas>
 <div id="dashboard">
+  <div style="font-weight:700;margin-bottom:4px;color:#9fb4d8">⚙️ Current Wave</div>
   <div><span class="label">DPS:</span> <span class="value" id="dashDPS">0.0</span></div>
+  <div><span class="label">Wave Len:</span> <span class="value" id="dashWaveLen">33s</span></div>
+  <div><span class="label">Wave DMG:</span> <span class="value" id="dashWaveDmg">0</span></div>
+  <div><span class="label">Enemy HP:</span> <span class="value" id="dashEnemyHP">0</span></div>
   <div><span class="label">Accuracy:</span> <span class="value" id="dashAcc">0%</span></div>
-  <div><span class="label">Wave HP:</span> <span class="value" id="dashWaveHP">0</span></div>
-  <div><span class="label">Ratio:</span> <span class="value" id="dashRatio">0.0x</span></div>
   <div style="margin-top:6px;border-top:1px solid rgba(120,160,220,0.2);padding-top:6px;">
-    <div><span class="label">Coins:</span> <span class="value" id="dashEcon">0 (need 0)</span></div>
-    <div><span class="label">Base Mult:</span> <span class="value" id="dashBaseMult">1.0x</span></div>
-    <div><span class="label">Difficulty:</span> <span class="value" id="dashDiff">0.9</span></div>
+    <div><span class="label">DPS/Coin:</span> <span class="value" id="dashDPSCoin">0.00</span></div>
+    <div><span class="label">Coins:</span> <span class="value" id="dashCoins">0</span></div>
   </div>
 </div>
 <div id="hud"><div class="wave" id="hudWave">WAVE 1</div><div class="coins" id="hudCoins">🪙 0</div><div class="hp" id="hudHp">❤ 100/100</div></div>
@@ -62,7 +63,7 @@
 <div id="stick"><div class="mid"></div><div id="knob"></div></div>
 <div class="overlay show" id="startScreen"><div class="panel"><h1>🏰 Tower Defender 3D</h1><div class="sub">Drag anywhere along the bottom to sweep your turret left & right.<br>Enemies advance from the distance — hold the line.</div><button class="btn" id="startBtn">START</button></div></div>
 <div class="overlay" id="pauseScreen"><div class="panel"><h1>⏸ PAUSED</h1><div class="sub">Game paused. Resume when ready.</div><button class="btn" id="resumeBtn">RESUME</button></div></div>
-<div class="overlay" id="waveSummaryScreen"><div class="panel"><h1 id="summaryTitle">Wave Complete!</h1><div class="sub" style="margin-bottom:18px">Performance Analysis</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px;font-size:13px;line-height:1.8;font-family:'Courier New',monospace"><div><span style="color:#8aa0c8">📊 Your DPS:</span><br><span style="color:#7fffb0;font-weight:bold" id="sumDPS">0.0</span></div><div><span style="color:#8aa0c8">🎯 Accuracy:</span><br><span style="color:#7fffb0;font-weight:bold" id="sumAcc">0%</span></div><div><span style="color:#8aa0c8">👾 Wave HP:</span><br><span style="color:#7fffb0;font-weight:bold" id="sumWaveHP">0</span></div><div><span style="color:#8aa0c8">⚖️ Ratio:</span><br><span style="color:#7fffb0;font-weight:bold" id="sumRatio">0.0x</span></div><div><span style="color:#8aa0c8">📈 Difficulty:</span><br><span style="color:#ff9a6b;font-weight:bold" id="sumDiff">0.9x</span></div><div><span style="color:#8aa0c8">💥 Next Wave:</span><br><span style="color:#ff9a6b;font-weight:bold" id="sumNext">0.9x</span></div></div><div style="text-align:center;color:#8aa0c8;font-size:12px;padding:12px;background:rgba(42,58,92,0.4);border-radius:8px;margin-bottom:16px"><span id="sumExplain">Your firepower matched the challenge.</span></div><button class="btn" id="continueBtn">CONTINUE TO SHOP</button></div></div>
+<div class="overlay" id="waveSummaryScreen"><div class="panel"><h1>📊 Economic Summary</h1><div class="sub" style="margin-bottom:14px;font-size:12px">This Wave Analysis & Next Wave Projection</div><div style="font-family:'Courier New',monospace;font-size:12px;line-height:2;color:#c0d0e8;margin-bottom:16px"><div style="background:rgba(20,30,50,0.5);padding:10px;border-radius:6px"><div style="color:#8aa0c8;margin-bottom:8px">⚔️ This Wave</div><div>DPS: <span style="color:#7fffb0;font-weight:bold" id="sumDPS">0.0</span> × <span style="color:#7fffb0" id="sumWaveLen">33s</span> = <span style="color:#ffed4e;font-weight:bold" id="sumWaveDmg">0</span> Damage</div><div>Enemy HP: <span style="color:#ff7a6a;font-weight:bold" id="sumEnemyHP">0</span></div><div>Your Accuracy: <span style="color:#7fffb0;font-weight:bold" id="sumAcc">0%</span> → Effective: <span style="color:#7fffb0" id="sumEffective">0</span> Damage</div><div style="margin-top:8px;color:#7fe0a0">✓ Balance: <span id="sumBalance">1.0x</span></div></div><div style="background:rgba(20,30,50,0.5);padding:10px;border-radius:6px;margin-top:10px"><div style="color:#8aa0c8;margin-bottom:8px">💰 Economic State</div><div>Coins Earned: <span style="color:#ffed4e;font-weight:bold" id="sumCoinsEarn">0</span></div><div>Total Available: <span style="color:#ffed4e;font-weight:bold" id="sumCoinTotal">0</span></div><div>DPS per Coin: <span style="color:#7fffb0;font-weight:bold" id="sumDPSCoin">0.000</span></div></div><div style="background:rgba(20,30,50,0.5);padding:10px;border-radius:6px;margin-top:10px"><div style="color:#8aa0c8;margin-bottom:8px">🔮 Next Wave Projection</div><div>New DPS = <span style="color:#7fffb0" id="sumCurrentDPS">0</span> + (<span style="color:#7fffb0" id="sumDPSCoin2">0.000</span> × <span style="color:#ffed4e" id="sumCoinUse">0</span>) = <span style="color:#7fffb0;font-weight:bold" id="sumNewDPS">0.0</span></div><div>New Enemy HP = <span style="color:#7fffb0" id="sumNewDPS2">0.0</span> × 33s × <span style="color:#7fffb0" id="sumAccProj">0%</span> + Auto = <span style="color:#ff7a6a;font-weight:bold" id="sumNewEnemyHP">0</span></div><div style="margin-top:8px;color:#ff9a6b">Difficulty: <span style="color:#ffed4e;font-weight:bold" id="sumDiffMult">1.0x</span> → <span style="color:#ffed4e;font-weight:bold" id="sumDiffNext">1.0x</span></div></div></div><button class="btn" id="continueBtn">CONTINUE TO SHOP</button></div></div>
 <div class="overlay" id="shopScreen"><div class="panel"><h1 id="shopTitle">Wave Cleared!</h1><div class="sub" id="shopSub">Spend coins, then start the next wave.</div><div class="coins">🪙 <span id="shopCoins">0</span></div><div style="text-align:center;color:#6ee08a;font-size:16px;font-weight:700;margin-bottom:16px">❤ <span id="shopHp">100</span>/<span id="shopMaxHp">100</span> HP</div><div class="shop-grid"><div class="shop-col"><h3>⚔️ Offense</h3><div id="offenseUpgrades"></div></div><div class="shop-col"><h3>🛡️ Defense</h3><div id="defenseUpgrades"></div></div></div><button class="btn" id="nextWaveBtn">START WAVE</button></div></div>
 <div class="overlay" id="gameOverScreen"><div class="panel"><h1>💀 Tower Destroyed</h1><div class="sub" id="gameOverSub">You held out for a while.</div><div class="coins">Best Wave: <span id="bestWave">0</span></div><button class="btn danger" id="restartBtn">TRY AGAIN</button></div></div>
 
@@ -657,6 +658,32 @@ function upgradeCost(key) {
   return Math.round(u.base * Math.pow(1 + ECONOMY.escalationRate, game.lv[key]));
 }
 
+function calculateDPSPerCoin() {
+  // Calculate DPS/Coin efficiency: average cost / DPS benefit of affordable upgrades
+  const offensiveUpgrades = ['fireRate', 'damage', 'pierce'];
+  let totalCost = 0, totalDPS = 0, count = 0;
+
+  for (const key of offensiveUpgrades) {
+    if (game.lv[key] >= upgrades[key].max) continue; // Skip maxed upgrades
+    const cost = upgradeCost(key);
+    if (cost > game.coins * 2) continue; // Skip items too expensive to consider
+
+    let dpsBenefit = 0;
+    if (key === 'fireRate') dpsBenefit = game.damage * game.fireRate * 0.25; // +25% fireRate
+    else if (key === 'damage') dpsBenefit = game.damage * game.fireRate * 0.35 / 0.35; // +35% damage
+    else if (key === 'pierce') dpsBenefit = game.damage * game.fireRate * 0.08; // Pierce benefit (simplified)
+
+    if (dpsBenefit > 0) {
+      totalCost += cost;
+      totalDPS += dpsBenefit;
+      count++;
+    }
+  }
+
+  // Return DPS gained per coin (average of affordable upgrades)
+  return count > 0 ? totalDPS / totalCost : 0.1;
+}
+
 function addAutoTurret() {
   const slots = [ {x:-5.5}, {x:5.5}, {x:-11}, {x:11} ];
   const i = game.autoTurrets.length;
@@ -803,63 +830,70 @@ function updateHUD() {
   hudHp.style.color = f > 0.25 ? '#6ee08a' : '#ff7a7a';
   enemyCount.textContent = '👾 ' + (enemies.length + toSpawn) + ' left';
 
-  // Dashboard (main turret accuracy only) - Economic Loop
+  // Dashboard - Economic Loop Components
   const mainDps = game.damage * game.fireRate;
-  const totalDps = (mainDps + game.autoTurrets.length * game.autoDamage * game.autoFireRate).toFixed(1);
   const acc = mainBulletsFired > 0 ? Math.round(100 * mainBulletsHit / mainBulletsFired) : 0;
-  const ratio = lastPerformanceRatio.toFixed(2);
-  const baseMult = lastDiffMultiplier.toFixed(2);
+  const waveDamage = mainDps * ECONOMY.waveDuration;
+  const dpsPerCoin = calculateDPSPerCoin();
 
   document.getElementById('dashDPS').textContent = mainDps.toFixed(1);
+  document.getElementById('dashWaveLen').textContent = ECONOMY.waveDuration + 's';
+  document.getElementById('dashWaveDmg').textContent = waveDamage.toFixed(0);
+  document.getElementById('dashEnemyHP').textContent = waveEnemyHP.toFixed(0);
   document.getElementById('dashAcc').textContent = acc + '%';
-  document.getElementById('dashWaveHP').textContent = waveEnemyHP.toFixed(0);
-  document.getElementById('dashRatio').textContent = ratio + 'x';
-  document.getElementById('dashBaseMult').textContent = baseMult + 'x';
-  document.getElementById('dashDiff').textContent = game.diff.toFixed(2);
-
-  // Economic metrics for next wave
-  const cheapestUpgrade = Math.min(
-    upgradeCost('fireRate'), upgradeCost('damage'), upgradeCost('maxHp'),
-    upgradeCost('pierce'), upgradeCost('regen'), upgradeCost('autoTurret'), upgradeCost('autoPower')
-  );
-  const canAffordNext = game.coins >= cheapestUpgrade;
-  document.getElementById('dashEcon').textContent = `${game.coins}🪙 (need ${cheapestUpgrade})`;
-  document.getElementById('dashEcon').style.color = canAffordNext ? '#7fffb0' : '#ffaa88';
+  document.getElementById('dashDPSCoin').textContent = dpsPerCoin.toFixed(3);
+  document.getElementById('dashCoins').textContent = game.coins;
 }
 
 function showWaveSummary(accuracy, totalDps) {
+  const mainDps = game.damage * game.fireRate;
+  const autoDps = game.autoTurrets.length * game.autoDamage * game.autoFireRate;
+  const dpsPerCoin = calculateDPSPerCoin();
   const oldDiff = game.diff / lastDiffMultiplier;
-  const newDiff = game.diff;
-  const mainDps = (game.damage * game.fireRate).toFixed(1);
 
-  // Economic Loop Equation: Total Damage (DPS × Time × Accuracy) vs Wave HP
-  const expectedTotalDamage = (game.damage * game.fireRate * accuracy * ECONOMY.waveDuration).toFixed(0);
-  const waveHp = Math.round(waveEnemyHP);
-  const economyBalance = (expectedTotalDamage / waveHp).toFixed(2);
+  // This Wave Breakdown
+  const waveDamage = mainDps * ECONOMY.waveDuration;
+  const effectiveDamage = waveDamage * accuracy;
+  const balance = effectiveDamage / Math.max(1, waveEnemyHP);
 
-  document.getElementById('sumDPS').textContent = mainDps;
+  // Economic State
+  const coinsEarned = lastCoinsEarned;
+  const totalCoins = game.coins;
+
+  // Next Wave Projection
+  const nextMainDps = mainDps + (dpsPerCoin * totalCoins);
+  const nextWaveDamage = nextMainDps * ECONOMY.waveDuration;
+  const nextEnemyHpFromMain = nextWaveDamage * accuracy;
+  const nextEnemyHpFromAuto = autoDps * ECONOMY.waveDuration;
+  const nextEnemyHpTotal = nextEnemyHpFromMain + nextEnemyHpFromAuto;
+
+  // Display This Wave
+  document.getElementById('sumDPS').textContent = mainDps.toFixed(1);
+  document.getElementById('sumWaveLen').textContent = ECONOMY.waveDuration;
+  document.getElementById('sumWaveDmg').textContent = waveDamage.toFixed(0);
+  document.getElementById('sumEnemyHP').textContent = waveEnemyHP.toFixed(0);
   document.getElementById('sumAcc').textContent = Math.round(accuracy * 100) + '%';
-  document.getElementById('sumWaveHP').textContent = waveHp;
-  document.getElementById('sumRatio').textContent = economyBalance + 'x';
-  document.getElementById('sumDiff').textContent = oldDiff.toFixed(2) + 'x';
-  document.getElementById('sumNext').textContent = newDiff.toFixed(2) + 'x';
+  document.getElementById('sumEffective').textContent = effectiveDamage.toFixed(0);
+  document.getElementById('sumBalance').textContent = balance.toFixed(2) + 'x';
 
-  // Explain the balance and scaling
-  let explanation = '📊 Balance: ';
-  if (economyBalance > 1.5) explanation += '💪 Crushed it! ';
-  else if (economyBalance > 1.2) explanation += '💯 Dominated! ';
-  else if (economyBalance > 1.0) explanation += '✨ Strong! ';
-  else if (economyBalance > 0.8) explanation += '⚖️ Balanced. ';
-  else if (economyBalance > 0.6) explanation += '⚠️ Tight. ';
-  else explanation += '🚨 Struggled. ';
+  // Display Economic State
+  document.getElementById('sumCoinsEarn').textContent = coinsEarned;
+  document.getElementById('sumCoinTotal').textContent = totalCoins;
+  document.getElementById('sumDPSCoin').textContent = dpsPerCoin.toFixed(3);
 
-  if (lastDiffMultiplier > 1.2) explanation += '📈 Difficulty +' + ((lastDiffMultiplier - 1) * 100).toFixed(0) + '%.';
-  else if (lastDiffMultiplier < 0.95) explanation += '📉 Difficulty -' + ((1 - lastDiffMultiplier) * 100).toFixed(0) + '%.';
-  else explanation += '➡️ Difficulty stable.';
+  // Display Next Wave Projection
+  document.getElementById('sumCurrentDPS').textContent = mainDps.toFixed(1);
+  document.getElementById('sumDPSCoin2').textContent = dpsPerCoin.toFixed(3);
+  document.getElementById('sumCoinUse').textContent = totalCoins;
+  document.getElementById('sumNewDPS').textContent = nextMainDps.toFixed(1);
+  document.getElementById('sumNewDPS2').textContent = nextMainDps.toFixed(1);
+  document.getElementById('sumAccProj').textContent = Math.round(accuracy * 100) + '%';
+  document.getElementById('sumNewEnemyHP').textContent = nextEnemyHpTotal.toFixed(0);
 
-  if (accuracy < 0.4) explanation += ' 🎯 Improve accuracy for better scaling.';
+  // Difficulty change
+  document.getElementById('sumDiffMult').textContent = oldDiff.toFixed(2) + 'x';
+  document.getElementById('sumDiffNext').textContent = game.diff.toFixed(2) + 'x';
 
-  document.getElementById('sumExplain').textContent = explanation;
   show('waveSummaryScreen');
 }
 
