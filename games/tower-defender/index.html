@@ -107,9 +107,9 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x1a2a4a);
 scene.fog = new THREE.Fog(0x1a2a4a, 42, 110);
 
-const camera = new THREE.PerspectiveCamera(120, 1, 0.1, 220);
-camera.position.set(0, 55, 20);
-camera.lookAt(0, 8, -26);
+const camera = new THREE.PerspectiveCamera(80, 1, 0.1, 220);
+camera.position.set(0, 42, 15);
+camera.lookAt(0, 6, -26);
 
 let composer, bloom;
 function buildComposer(w, h) {
