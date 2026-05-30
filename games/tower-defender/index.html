@@ -65,7 +65,7 @@
 <div id="stick"><div class="mid"></div><div id="knob"></div></div>
 <div class="overlay show" id="startScreen"><div class="panel"><h1>🏰 Tower Defender 3D</h1><div class="sub">Drag anywhere along the bottom to sweep your turret left & right.<br>Enemies advance from the distance — hold the line.</div><button class="btn" id="startBtn">START</button></div></div>
 <div class="overlay" id="pauseScreen"><div class="panel"><h1>⏸ PAUSED</h1><div class="sub">Game paused. Resume when ready.</div><button class="btn" id="resumeBtn">RESUME</button></div></div>
-<div class="overlay" id="waveSummaryScreen"><div class="panel"><h1>📊 Wave <span id="sumWaveNum">1</span> Complete</h1><div style="font-family:'Courier New',monospace;font-size:12px;line-height:1.9;color:#c0d0e8;margin-bottom:16px"><div style="background:rgba(20,30,50,0.5);padding:12px;border-radius:8px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 14px"><div>Wave Length:</div><div style="color:#7fffb0;text-align:right" id="sumWaveLen">33s</div><div>Player DPS:</div><div style="color:#7fffb0;text-align:right" id="sumDPS">0.0</div><div>Player Accuracy:</div><div style="color:#7fffb0;text-align:right" id="sumAcc">0%</div><div>Auto DPS:</div><div style="color:#7fffb0;text-align:right" id="sumAutoDPS">0.0</div><div>Regen/sec:</div><div style="color:#7fffb0;text-align:right" id="sumRegen">0.0</div><div>Effective Damage:</div><div style="color:#7fffb0;text-align:right" id="sumEffective">0</div><div>Wave HP:</div><div style="color:#ff7a6a;text-align:right" id="sumEnemyHP">0</div><div style="border-top:1px solid rgba(120,160,220,0.25);padding-top:4px;margin-top:4px">Actual Ratio:</div><div style="color:#ffed4e;text-align:right;border-top:1px solid rgba(120,160,220,0.25);padding-top:4px;margin-top:4px" id="sumActualRatio">0.00</div><div>Target Ratio:</div><div style="color:#ff9a6b;text-align:right" id="sumTargetRatio">1.20</div><div>Coins Available:</div><div style="color:#ffed4e;text-align:right" id="sumCoinTotal">0</div></div></div></div><button class="btn" id="continueBtn">CONTINUE TO SHOP</button></div></div>
+<div class="overlay" id="waveSummaryScreen"><div class="panel"><h1>📊 Wave <span id="sumWaveNum">1</span> Complete</h1><div style="text-align:center;font-size:16px;font-weight:700;margin-bottom:14px;padding:10px;background:rgba(20,30,50,0.6);border-radius:8px"><div style="color:#6ee08a;margin-bottom:4px">❤ <span id="sumHealth">100</span>/100 HP</div><div style="color:#ffed4e">🪙 <span id="sumCoins">0</span> Coins</div></div><div style="font-family:'Courier New',monospace;font-size:12px;line-height:1.9;color:#c0d0e8;margin-bottom:16px"><div style="background:rgba(20,30,50,0.5);padding:12px;border-radius:8px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 14px"><div>Wave Length:</div><div style="color:#7fffb0;text-align:right" id="sumWaveLen">33s</div><div>Player DPS:</div><div style="color:#7fffb0;text-align:right" id="sumDPS">0.0</div><div>Player Accuracy:</div><div style="color:#7fffb0;text-align:right" id="sumAcc">0%</div><div>Auto DPS:</div><div style="color:#7fffb0;text-align:right" id="sumAutoDPS">0.0</div><div>Regen/sec:</div><div style="color:#7fffb0;text-align:right" id="sumRegen">0.0</div><div>Effective Damage:</div><div style="color:#7fffb0;text-align:right" id="sumEffective">0</div><div>Wave HP:</div><div style="color:#ff7a6a;text-align:right" id="sumEnemyHP">0</div><div style="border-top:1px solid rgba(120,160,220,0.25);padding-top:4px;margin-top:4px">Actual Ratio:</div><div style="color:#ffed4e;text-align:right;border-top:1px solid rgba(120,160,220,0.25);padding-top:4px;margin-top:4px" id="sumActualRatio">0.00</div><div>Target Ratio:</div><div style="color:#ff9a6b;text-align:right" id="sumTargetRatio">1.20</div></div></div></div><button class="btn" id="continueBtn">CONTINUE TO SHOP</button></div></div>
 <div class="overlay" id="shopScreen"><div class="panel"><h1 id="shopTitle">Wave Cleared!</h1><div class="sub" id="shopSub">Spend coins, then start the next wave.</div><div class="coins">🪙 <span id="shopCoins">0</span></div><div style="text-align:center;color:#6ee08a;font-size:16px;font-weight:700;margin-bottom:16px">❤ <span id="shopHp">100</span>/<span id="shopMaxHp">100</span> HP</div><div class="shop-grid"><div class="shop-col"><h3>⚔️ Offense</h3><div id="offenseUpgrades"></div></div><div class="shop-col"><h3>🛡️ Defense</h3><div id="defenseUpgrades"></div></div></div><div style="margin-top:16px;padding:12px;background:rgba(20,30,50,0.6);border-radius:8px;font-family:'Courier New',monospace;font-size:11px;color:#aabbdd"><div style="color:#8aa0c8;margin-bottom:8px;font-weight:700">🔮 Wave <span id="shopNextWaveNum">2</span> Projection</div><div style="display:grid;grid-template-columns:1fr auto;gap:3px 14px"><div>Wave Length:</div><div style="color:#7fffb0;text-align:right" id="shopNWLen">33s</div><div>Player DPS:</div><div style="color:#7fffb0;text-align:right" id="shopNWDps">0.0</div><div>Prev Accuracy:</div><div style="color:#7fffb0;text-align:right" id="shopNWAcc">0%</div><div>Auto DPS:</div><div style="color:#7fffb0;text-align:right" id="shopNWAuto">0.0</div><div>Regen/sec:</div><div style="color:#7fffb0;text-align:right" id="shopNWRegen">0.0</div><div style="border-top:1px solid rgba(120,160,220,0.25);padding-top:3px;margin-top:3px">Effective Damage:</div><div style="color:#7fffb0;text-align:right;border-top:1px solid rgba(120,160,220,0.25);padding-top:3px;margin-top:3px" id="shopNWEff">0</div><div>Target Ratio:</div><div style="color:#ff9a6b;text-align:right" id="shopNWRatio">1.20</div><div style="font-weight:700;color:#ffed4e">→ Enemy HP:</div><div style="color:#ffed4e;text-align:right;font-weight:700" id="shopNWHP">0</div></div></div><button class="btn" id="nextWaveBtn">START WAVE</button></div></div>
 <div class="overlay" id="gameOverScreen"><div class="panel"><h1>💀 Tower Destroyed</h1><div class="sub" id="gameOverSub">You held out for a while.</div><div class="coins">Best Wave: <span id="bestWave">0</span></div><button class="btn danger" id="restartBtn">TRY AGAIN</button></div></div>
 
@@ -107,9 +107,9 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x1a2a4a);
 scene.fog = new THREE.Fog(0x1a2a4a, 42, 110);
 
-const camera = new THREE.PerspectiveCamera(80, 1, 0.1, 220);
-camera.position.set(0, 16, 14);
-camera.lookAt(0, 1, -18);
+const camera = new THREE.PerspectiveCamera(85, 1, 0.1, 220);
+camera.position.set(0, 18, 32);
+camera.lookAt(0, -2, -26);
 
 let composer, bloom;
 function buildComposer(w, h) {
@@ -876,8 +876,8 @@ function update(dt) {
         e.z += e.speed * dt;
         e.g.position.z = e.z;
       } else {
-        // Damage incurred = enemy's remaining HP (scaled to tower HP units)
-        damageTower(Math.max(1, e.hp * TOWER_DMG_SCALE));
+        // Damage incurred = (enemy remaining HP / wave total HP) * 100
+        damageTower(Math.max(1, Math.round((e.hp / waveEnemyHP) * 100)));
         burst(e.x, e.r, e.z, e.eyeColor, 18, 10, 0.4);
         removeEnemy(j);
       }
@@ -971,6 +971,8 @@ function showWaveSummary(accuracy, totalDps) {
   const actualRatio = expectedNextWaveHP > 0 ? effectiveDamage / expectedNextWaveHP : 0;
 
   document.getElementById('sumWaveNum').textContent = game.wave;
+  document.getElementById('sumHealth').textContent = Math.ceil(game.hp);
+  document.getElementById('sumCoins').textContent = game.coins;
   document.getElementById('sumWaveLen').textContent = game.waveDuration + 's';
   document.getElementById('sumDPS').textContent = mainDps.toFixed(1);
   document.getElementById('sumAcc').textContent = Math.round(accuracy * 100) + '%';
@@ -980,7 +982,6 @@ function showWaveSummary(accuracy, totalDps) {
   document.getElementById('sumEnemyHP').textContent = expectedNextWaveHP.toFixed(0);
   document.getElementById('sumActualRatio').textContent = actualRatio.toFixed(2);
   document.getElementById('sumTargetRatio').textContent = difficultyRatioTarget.toFixed(2);
-  document.getElementById('sumCoinTotal').textContent = game.coins;
 
   show('waveSummaryScreen');
 }
