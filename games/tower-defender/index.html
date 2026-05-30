@@ -134,7 +134,7 @@
   let playerCooldown = 0;
   const TURRET_H = 50;
   const BARREL_LEN = 38;
-  const MAX_TILT = 1.35;
+  const MAX_TILT = Math.PI / 2;  // full deflection = horizontal shot
   function turretPivot() { return { x: game.turretX, y: game.turretY - TURRET_H }; }
 
   const upgrades = {
@@ -234,11 +234,15 @@
     const proximityDanger = 1 - Math.min(1, gap / 180);
     const hpLostFrac = Math.max(0, (waveStartHp - game.hp)) / game.maxHp;
     const threat = Math.max(proximityDanger, hpLostFrac * 1.2);
-    if (threat < 0.20) game.diff *= 1.15;
-    else if (threat < 0.40) game.diff *= 1.08;
-    else if (threat < 0.65) game.diff *= 1.02;
-    else game.diff *= 0.95;
-    game.diff = Math.max(0.8, Math.min(game.diff, 6));
+    // The less threatening the previous wave was, the harder the next ramp.
+    // Dominated waves now escalate difficulty aggressively; tough waves ease off.
+    if (threat < 0.10) game.diff *= 1.45;
+    else if (threat < 0.20) game.diff *= 1.32;
+    else if (threat < 0.35) game.diff *= 1.20;
+    else if (threat < 0.50) game.diff *= 1.10;
+    else if (threat < 0.70) game.diff *= 1.02;
+    else game.diff *= 0.92;
+    game.diff = Math.max(0.8, Math.min(game.diff, 9));
     game.coins += 8 + game.wave * 3;
     playSound(523, 0.2, 'sine', 0.2);
     playSound(659, 0.2, 'sine', 0.2);
@@ -359,7 +363,10 @@
       if (e.y < game.wallY) {
         e.y += e.speed * dt;
       } else {
-        damageTower(5 + game.wave * 0.5 + (e.type==='tank'?8:0));
+        // Breach damage scales with the enemy's remaining health —
+        // a nearly-dead enemy does far less damage than a full-health one.
+        const hpFrac = Math.max(0.1, e.hp / e.maxHp);
+        damageTower((5 + game.wave * 0.5 + (e.type==='tank'?8:0)) * hpFrac);
         spawnDeath(e.x, e.y, e.color);
         enemies.splice(j,1);
       }
