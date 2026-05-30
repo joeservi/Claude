@@ -46,7 +46,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="dashboard">
-  <div style="font-weight:700;margin-bottom:4px;color:#9fb4d8">Wave <span id="dashWaveNum">1</span> · <span id="dashWaveLen">33</span>s</div>
+  <div style="font-weight:700;margin-bottom:4px;color:#9fb4d8">Wave <span id="dashWaveNum">1</span> · <span id="dashWaveLen">33</span>s · <span id="dashEnemyCount">0</span> 👾</div>
   <div><span class="label">Player DPS:</span> <span class="value" id="dashDPS">0.0</span></div>
   <div><span class="label">Accuracy:</span> <span class="value" id="dashAcc">0%</span></div>
   <div><span class="label">Auto DPS:</span> <span class="value" id="dashAutoDPS">0.0</span></div>
@@ -80,7 +80,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
-const HALF_W = 15, SPAWN_Z = -52, WALL_Z = 0, MAX_YAW = 1.25, BULLET_SPEED = 46, AUTO_BULLET_SPEED = 42;
+const HALF_W = 15, SPAWN_Z = -52, WALL_Z = 0, MAX_YAW = Math.PI / 2, BULLET_SPEED = 46, AUTO_BULLET_SPEED = 42;
 const TOWER_DMG_SCALE = 1.0; // Tower damage = enemy remaining HP (1:1)
 let soundEnabled = true;
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -107,9 +107,9 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x1a2a4a);
 scene.fog = new THREE.Fog(0x1a2a4a, 42, 110);
 
-const camera = new THREE.PerspectiveCamera(85, 1, 0.1, 220);
-camera.position.set(0, 18, 32);
-camera.lookAt(0, -2, -26);
+const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 220);
+camera.position.set(0, 50, 2);
+camera.lookAt(0, 0, -25);
 
 let composer, bloom;
 function buildComposer(w, h) {
@@ -633,10 +633,15 @@ function startWave() {
 
 function buildWaveComposition(waveHP, wave) {
   // Produce enemy HP chunks summing exactly to waveHP.
-  // More enemies per wave as it progresses; enemies just get bigger overall.
+  // Enemy size increases linearly with wave: avg 20 HP at wave 1, avg 100 HP at wave 10+
+  // More enemies per round means smaller total waveHP is spread across more enemies
   const queue = [];
-  const minHP = Math.max(3, 8 - wave * 0.5); // More aggressive: smaller min in later waves = many more enemies
-  const maxHP = Math.max(minHP * 2, waveHP * (0.12 + Math.min(0.18, wave * 0.01))); // Tighter max to force more variety
+
+  // Target average enemy HP based on wave (scales linearly 20 → 100)
+  const avgEnemyHP = 20 + Math.min(wave - 1, 9) * (100 - 20) / 9;
+  const minHP = Math.max(4, avgEnemyHP * 0.4);
+  const maxHP = avgEnemyHP * 1.6;
+
   let remaining = waveHP;
   let guard = 0;
   while (remaining > 0 && guard++ < 200) {
@@ -947,6 +952,7 @@ function updateHUD() {
 
   document.getElementById('dashWaveNum').textContent = game.wave;
   document.getElementById('dashWaveLen').textContent = game.waveDuration;
+  document.getElementById('dashEnemyCount').textContent = spawnQueue.length;
   document.getElementById('dashDPS').textContent = mainDps.toFixed(1);
   document.getElementById('dashAcc').textContent = acc + '%';
   document.getElementById('dashAutoDPS').textContent = autoDps.toFixed(1);
