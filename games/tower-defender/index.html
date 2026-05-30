@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Tower Defender</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0e1a; touch-action: none; }
+  #game { display: block; width: 100vw; height: 100vh; }
+  .overlay {
+    position: fixed; inset: 0; display: none; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: rgba(5, 8, 18, 0.85); color: #e8eef7;
+    font-family: -apple-system, system-ui, Arial, sans-serif; padding: 20px;
+  }
+  .overlay.show { display: flex; }
+  .panel {
+    background: #141b30; border: 1px solid #2a3a5c; border-radius: 16px;
+    padding: 20px; width: 100%; max-width: 460px; max-height: 88vh; overflow-y: auto;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  }
+  .panel h1 { font-size: 26px; text-align: center; margin-bottom: 4px; }
+  .panel .sub { text-align: center; color: #8aa0c8; margin-bottom: 16px; font-size: 14px; }
+  .coins { text-align: center; font-size: 20px; color: #ffd75e; font-weight: bold; margin-bottom: 16px; }
+  .shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .shop-col h3 { font-size: 14px; color: #8aa0c8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; text-align: center; }
+  .up {
+    width: 100%; text-align: left; padding: 10px 12px; margin-bottom: 8px;
+    background: #1d2740; border: 1px solid #2a3a5c; border-radius: 10px;
+    color: #e8eef7; cursor: pointer; transition: 0.12s; font-size: 13px;
+  }
+  .up:active { transform: scale(0.97); }
+  .up:disabled { opacity: 0.4; cursor: not-allowed; }
+  .up .name { font-weight: bold; display: block; }
+  .up .lvl { color: #7fe0a0; font-size: 11px; }
+  .up .cost { color: #ffd75e; float: right; font-weight: bold; }
+  .btn {
+    width: 100%; padding: 15px; border: none; border-radius: 12px;
+    background: linear-gradient(135deg, #3b82f6, #6366f1); color: white;
+    font-size: 18px; font-weight: bold; cursor: pointer; margin-top: 4px;
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn.danger { background: linear-gradient(135deg, #ef4444, #b91c1c); }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div class="overlay" id="startScreen">
+  <div class="panel">
+    <h1>🏰 Tower Defender</h1>
+    <div class="sub">Hold your finger to aim & fire the turret.<br>Survive the waves. Spend coins to upgrade.</div>
+    <button class="btn" id="startBtn">START</button>
+  </div>
+</div>
+
+<div class="overlay" id="shopScreen">
+  <div class="panel">
+    <h1 id="shopTitle">Wave Cleared!</h1>
+    <div class="sub" id="shopSub">Spend coins, then start the next wave.</div>
+    <div class="coins">🪙 <span id="shopCoins">0</span></div>
+    <div class="shop-grid">
+      <div class="shop-col">
+        <h3>⚔️ Offense</h3>
+        <div id="offenseUpgrades"></div>
+      </div>
+      <div class="shop-col">
+        <h3>🛡️ Defense</h3>
+        <div id="defenseUpgrades"></div>
+      </div>
+    </div>
+    <button class="btn" id="nextWaveBtn">START WAVE</button>
+  </div>
+</div>
+
+<div class="overlay" id="gameOverScreen">
+  <div class="panel">
+    <h1>💀 Tower Destroyed</h1>
+    <div class="sub" id="gameOverSub">You survived the onslaught for a while.</div>
+    <div class="coins">Best Wave: <span id="bestWave">0</span></div>
+    <button class="btn danger" id="restartBtn">TRY AGAIN</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  let W = 0, H = 0, DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+  function resize() {
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---- Game State ----
+  const State = { START: 0, PLAYING: 1, SHOP: 2, GAMEOVER: 3 };
+  let state = State.START;
+
+  const game = {
+    cx: 0, cy: 0,         // tower center
+    towerRadius: 70,
+    coins: 0,
+    wave: 0,
+    bestWave: 0,
+    // tower stats
+    maxHp: 100, hp: 100,
+    hpRegen: 0,           // hp per second
+    // player turret stats
+    fireRate: 2.0,        // shots per second
+    damage: 8,
+    bulletSpeed: 520,
+    range: 9999,
+    // auto turrets
+    autoTurrets: [],      // {angle, level, cooldown}
+    autoDamage: 5,
+    autoFireRate: 1.0,
+    // upgrade levels
+    lv: { fireRate:0, damage:0, autoTurret:0, autoPower:0, maxHp:0, regen:0 },
+    // difficulty adaption
+    diff: 1.0,
+  };
+
+  let bullets = [];   // {x,y,vx,vy,dmg,r,enemy?}
+  let enemies = [];   // {x,y,hp,maxHp,speed,r,reward,type,slow}
+  let particles = []; // {x,y,vx,vy,life,maxLife,color,size}
+  let floaters = [];  // {x,y,text,life,color}
+
+  // wave control
+  let toSpawn = 0, spawnTimer = 0, spawnInterval = 0.8;
+  let waveStartHp = 100, waveStartTime = 0;
+
+  // input
+  let aiming = false, aimX = 0, aimY = 0;
+  let playerCooldown = 0;
+
+  // ---- Upgrade Definitions ----
+  const upgrades = {
+    fireRate:   { name:'Fire Rate',   desc:'+25% turret fire rate', base:25, growth:1.55, max:20,
+                  apply:()=>{ game.fireRate *= 1.25; } },
+    damage:     { name:'Turret Damage',desc:'+40% turret damage', base:30, growth:1.55, max:30,
+                  apply:()=>{ game.damage *= 1.40; } },
+    autoTurret: { name:'Build Auto-Turret',desc:'Adds an auto-turret', base:60, growth:1.8, max:8,
+                  apply:()=>{ addAutoTurret(); } },
+    autoPower:  { name:'Auto-Turret Power',desc:'+35% auto dmg & rate', base:45, growth:1.6, max:25,
+                  apply:()=>{ game.autoDamage*=1.35; game.autoFireRate*=1.20; } },
+    maxHp:      { name:'Max HP',      desc:'+30 max HP (& heal it)', base:35, growth:1.5, max:40,
+                  apply:()=>{ game.maxHp += 30; game.hp += 30; } },
+    regen:      { name:'HP Regen',    desc:'+1.5 HP/sec', base:50, growth:1.6, max:20,
+                  apply:()=>{ game.hpRegen += 1.5; } },
+  };
+  function upgradeCost(key) {
+    const u = upgrades[key];
+    return Math.round(u.base * Math.pow(u.growth, game.lv[key]));
+  }
+
+  function addAutoTurret() {
+    const n = game.autoTurrets.length;
+    // distribute around the tower ring
+    const angle = (n * (Math.PI * 2 / 6)) + Math.PI / 6;
+    game.autoTurrets.push({ angle, cooldown: 0 });
+    // reposition all evenly
+    const count = game.autoTurrets.length;
+    game.autoTurrets.forEach((t, i) => { t.angle = (i / count) * Math.PI * 2 - Math.PI/2; });
+  }
+
+  // ---- Game Flow ----
+  function resetGame() {
+    game.cx = W/2; game.cy = H/2;
+    game.coins = 0; game.wave = 0;
+    game.maxHp = 100; game.hp = 100; game.hpRegen = 0;
+    game.fireRate = 2.0; game.damage = 8; game.bulletSpeed = 520;
+    game.autoTurrets = []; game.autoDamage = 5; game.autoFireRate = 1.0;
+    game.lv = { fireRate:0, damage:0, autoTurret:0, autoPower:0, maxHp:0, regen:0 };
+    game.diff = 1.0;
+    bullets = []; enemies = []; particles = []; floaters = [];
+  }
+
+  function startGame() {
+    resetGame();
+    hideAll();
+    startWave();
+  }
+
+  function startWave() {
+    game.cx = W/2; game.cy = H/2;
+    game.wave++;
+    game.bestWave = Math.max(game.bestWave, game.wave);
+    // wave size & difficulty scale
+    const base = 6 + game.wave * 2;
+    toSpawn = Math.round(base * game.diff);
+    spawnTimer = 0;
+    spawnInterval = Math.max(0.25, 0.85 - game.wave * 0.02);
+    waveStartHp = game.hp;
+    waveStartTime = performance.now();
+    state = State.PLAYING;
+    hideAll();
+  }
+
+  function endWave() {
+    // ---- Adaptive difficulty ----
+    // Evaluate how the player did this wave.
+    const hpFrac = game.hp / game.maxHp;
+    const hpLostFrac = Math.max(0, (waveStartHp - game.hp)) / game.maxHp;
+    const elapsed = (performance.now() - waveStartTime) / 1000;
+    // Player crushed it (lost little HP, fast) -> ramp up. Struggled -> ease off.
+    if (hpLostFrac < 0.08 && hpFrac > 0.7) game.diff *= 1.18;       // dominated
+    else if (hpLostFrac < 0.20) game.diff *= 1.10;                  // comfortable
+    else if (hpLostFrac < 0.45) game.diff *= 1.03;                  // tense (ideal)
+    else game.diff *= 0.94;                                          // overwhelmed, ease
+    game.diff = Math.max(0.8, Math.min(game.diff, 6));
+
+    game.coins += 10 + game.wave * 3; // wave clear bonus
+    state = State.SHOP;
+    showShop();
+  }
+
+  function damageTower(amount) {
+    game.hp -= amount;
+    if (game.hp <= 0) {
+      game.hp = 0;
+      gameOver();
+    }
+  }
+
+  function gameOver() {
+    state = State.GAMEOVER;
+    document.getElementById('bestWave').textContent = game.bestWave;
+    document.getElementById('gameOverSub').textContent =
+      `You reached Wave ${game.wave}. The horde grew relentless.`;
+    show('gameOverScreen');
+  }
+
+  // ---- Enemy Spawning ----
+  function spawnEnemy() {
+    // pick a random edge point
+    const edge = Math.floor(Math.random() * 4);
+    let x, y;
+    if (edge === 0) { x = Math.random()*W; y = -30; }
+    else if (edge === 1) { x = W+30; y = Math.random()*H; }
+    else if (edge === 2) { x = Math.random()*W; y = H+30; }
+    else { x = -30; y = Math.random()*H; }
+
+    const w = game.wave;
+    // enemy variety scaled by difficulty
+    let type = 'grunt';
+    const roll = Math.random();
+    if (w >= 3 && roll < 0.18) type = 'tank';
+    else if (w >= 2 && roll < 0.45) type = 'fast';
+
+    let hp, speed, r, reward, color;
+    const d = game.diff;
+    if (type === 'tank') {
+      hp = (40 + w*12) * d; speed = 28 + w*1.2; r = 20; reward = 8 + Math.floor(w*0.8); color = '#c0563f';
+    } else if (type === 'fast') {
+      hp = (10 + w*4) * d; speed = 70 + w*3; r = 10; reward = 4 + Math.floor(w*0.4); color = '#5ad6e0';
+    } else {
+      hp = (18 + w*6) * d; speed = 42 + w*2; r = 14; reward = 3 + Math.floor(w*0.4); color = '#9b8cff';
+    }
+    enemies.push({ x, y, hp, maxHp:hp, speed, r, reward, type, color, hitFlash:0 });
+  }
+
+  // ---- Firing ----
+  function fireFromPlayer() {
+    if (!aiming) return;
+    const dx = aimX - game.cx, dy = aimY - game.cy;
+    const len = Math.hypot(dx, dy) || 1;
+    const vx = dx/len * game.bulletSpeed, vy = dy/len * game.bulletSpeed;
+    // muzzle at edge of inner turret
+    const mx = game.cx + dx/len * 26, my = game.cy + dy/len * 26;
+    bullets.push({ x:mx, y:my, vx, vy, dmg:game.damage, r:5, color:'#ffe27a', life:2 });
+    spawnMuzzle(mx, my, dx/len, dy/len);
+  }
+
+  function fireAutoTurret(t) {
+    const tx = game.cx + Math.cos(t.angle) * (game.towerRadius - 16);
+    const ty = game.cy + Math.sin(t.angle) * (game.towerRadius - 16);
+    // target nearest enemy
+    let best = null, bestD = Infinity;
+    for (const e of enemies) {
+      const d = (e.x-tx)**2 + (e.y-ty)**2;
+      if (d < bestD) { bestD = d; best = e; }
+    }
+    if (!best) return false;
+    const dx = best.x - tx, dy = best.y - ty;
+    const len = Math.hypot(dx, dy) || 1;
+    bullets.push({ x:tx, y:ty, vx:dx/len*460, vy:dy/len*460, dmg:game.autoDamage, r:4, color:'#7fe0a0', life:2 });
+    return true;
+  }
+
+  // ---- Particles ----
+  function spawnHit(x, y, color) {
+    for (let i=0;i<6;i++){
+      const a = Math.random()*Math.PI*2, s = 40+Math.random()*120;
+      particles.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:0.4, maxLife:0.4, color, size:2+Math.random()*2 });
+    }
+  }
+  function spawnDeath(x, y, color) {
+    for (let i=0;i<14;i++){
+      const a = Math.random()*Math.PI*2, s = 60+Math.random()*180;
+      particles.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:0.6, maxLife:0.6, color, size:2+Math.random()*3 });
+    }
+  }
+  function spawnMuzzle(x, y, dx, dy) {
+    for (let i=0;i<3;i++){
+      const spread = (Math.random()-0.5)*0.6;
+      const a = Math.atan2(dy,dx)+spread, s=80+Math.random()*120;
+      particles.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:0.18, maxLife:0.18, color:'#ffd75e', size:2 });
+    }
+  }
+  function addFloater(x,y,text,color){ floaters.push({x,y,text,life:0.8,color}); }
+
+  // ---- Update ----
+  function update(dt) {
+    if (state !== State.PLAYING) return;
+
+    // regen
+    if (game.hpRegen > 0 && game.hp < game.maxHp) {
+      game.hp = Math.min(game.maxHp, game.hp + game.hpRegen * dt);
+    }
+
+    // spawn enemies
+    if (toSpawn > 0) {
+      spawnTimer -= dt;
+      if (spawnTimer <= 0) { spawnEnemy(); toSpawn--; spawnTimer = spawnInterval; }
+    }
+
+    // player firing
+    playerCooldown -= dt;
+    if (aiming && playerCooldown <= 0) {
+      fireFromPlayer();
+      playerCooldown = 1 / game.fireRate;
+    }
+
+    // auto turrets
+    for (const t of game.autoTurrets) {
+      t.cooldown -= dt;
+      if (t.cooldown <= 0) {
+        if (fireAutoTurret(t)) t.cooldown = 1 / game.autoFireRate;
+        else t.cooldown = 0.1;
+      }
+    }
+
+    // bullets
+    for (let i=bullets.length-1;i>=0;i--){
+      const b = bullets[i];
+      b.x += b.vx*dt; b.y += b.vy*dt; b.life -= dt;
+      if (b.life<=0 || b.x<-50||b.x>W+50||b.y<-50||b.y>H+50){ bullets.splice(i,1); continue; }
+      // collide with enemies
+      for (let j=enemies.length-1;j>=0;j--){
+        const e = enemies[j];
+        if ((b.x-e.x)**2 + (b.y-e.y)**2 <= (e.r+b.r)**2){
+          e.hp -= b.dmg; e.hitFlash = 0.1;
+          spawnHit(b.x, b.y, e.color);
+          bullets.splice(i,1);
+          if (e.hp <= 0){
+            game.coins += e.reward;
+            addFloater(e.x, e.y, '+'+e.reward, '#ffd75e');
+            spawnDeath(e.x, e.y, e.color);
+            enemies.splice(j,1);
+          }
+          break;
+        }
+      }
+    }
+
+    // enemies move toward tower
+    for (let j=enemies.length-1;j>=0;j--){
+      const e = enemies[j];
+      const dx = game.cx - e.x, dy = game.cy - e.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      if (dist > game.towerRadius + e.r - 4) {
+        e.x += dx/dist * e.speed * dt;
+        e.y += dy/dist * e.speed * dt;
+      } else {
+        // contact: damage tower then die (kamikaze)
+        damageTower(6 + game.wave * 0.6 + (e.type==='tank'?10:0));
+        spawnDeath(e.x, e.y, e.color);
+        enemies.splice(j,1);
+      }
+      if (e.hitFlash>0) e.hitFlash -= dt;
+    }
+
+    // particles
+    for (let i=particles.length-1;i>=0;i--){
+      const p = particles[i];
+      p.x += p.vx*dt; p.y += p.vy*dt; p.vx*=0.92; p.vy*=0.92; p.life-=dt;
+      if (p.life<=0) particles.splice(i,1);
+    }
+    // floaters
+    for (let i=floaters.length-1;i>=0;i--){
+      const f = floaters[i]; f.y -= 30*dt; f.life -= dt;
+      if (f.life<=0) floaters.splice(i,1);
+    }
+
+    // wave end check
+    if (toSpawn === 0 && enemies.length === 0 && state === State.PLAYING) {
+      endWave();
+    }
+  }
+
+  // ---- Render ----
+  function draw() {
+    ctx.clearRect(0,0,W,H);
+    // background grid
+    ctx.fillStyle = '#0a0e1a'; ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle = 'rgba(40,55,90,0.25)'; ctx.lineWidth = 1;
+    const g = 40;
+    ctx.beginPath();
+    for (let x=0;x<W;x+=g){ ctx.moveTo(x,0); ctx.lineTo(x,H); }
+    for (let y=0;y<H;y+=g){ ctx.moveTo(0,y); ctx.lineTo(W,y); }
+    ctx.stroke();
+
+    if (state === State.START) return;
+
+    const {cx, cy, towerRadius} = game;
+
+    // tower area
+    ctx.beginPath(); ctx.arc(cx,cy,towerRadius,0,Math.PI*2);
+    ctx.fillStyle = 'rgba(50,70,120,0.25)'; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = '#3b5a9c'; ctx.stroke();
+    // hp ring
+    const hpFrac = game.hp/game.maxHp;
+    ctx.beginPath();
+    ctx.arc(cx,cy,towerRadius+6,-Math.PI/2, -Math.PI/2 + Math.PI*2*hpFrac);
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = hpFrac>0.5?'#5ad67a':(hpFrac>0.25?'#ffd75e':'#ef4444');
+    ctx.stroke();
+
+    // auto turrets
+    for (const t of game.autoTurrets){
+      const tx = cx + Math.cos(t.angle)*(towerRadius-16);
+      const ty = cy + Math.sin(t.angle)*(towerRadius-16);
+      ctx.beginPath(); ctx.arc(tx,ty,9,0,Math.PI*2);
+      ctx.fillStyle = '#2f7f55'; ctx.fill();
+      ctx.lineWidth=2; ctx.strokeStyle='#7fe0a0'; ctx.stroke();
+    }
+
+    // aim line
+    if (aiming && state===State.PLAYING){
+      ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(aimX,aimY);
+      ctx.strokeStyle='rgba(255,226,122,0.25)'; ctx.lineWidth=2; ctx.stroke();
+    }
+
+    // player turret (center)
+    let ang = aiming ? Math.atan2(aimY-cy, aimX-cx) : -Math.PI/2;
+    ctx.save(); ctx.translate(cx,cy); ctx.rotate(ang);
+    ctx.fillStyle = '#ffd75e';
+    ctx.fillRect(0,-5,30,10);            // barrel
+    ctx.restore();
+    ctx.beginPath(); ctx.arc(cx,cy,16,0,Math.PI*2);
+    ctx.fillStyle = '#e8a13e'; ctx.fill();
+    ctx.lineWidth=3; ctx.strokeStyle='#fff2c4'; ctx.stroke();
+
+    // enemies
+    for (const e of enemies){
+      ctx.beginPath(); ctx.arc(e.x,e.y,e.r,0,Math.PI*2);
+      ctx.fillStyle = e.hitFlash>0 ? '#ffffff' : e.color; ctx.fill();
+      ctx.lineWidth=2; ctx.strokeStyle='rgba(0,0,0,0.4)'; ctx.stroke();
+      // hp bar
+      if (e.hp < e.maxHp){
+        const bw = e.r*2, f = Math.max(0,e.hp/e.maxHp);
+        ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(e.x-e.r, e.y-e.r-8, bw, 4);
+        ctx.fillStyle='#ff5e5e'; ctx.fillRect(e.x-e.r, e.y-e.r-8, bw*f, 4);
+      }
+    }
+
+    // bullets
+    for (const b of bullets){
+      ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2);
+      ctx.fillStyle=b.color; ctx.fill();
+    }
+
+    // particles
+    for (const p of particles){
+      ctx.globalAlpha = Math.max(0, p.life/p.maxLife);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x-p.size/2, p.y-p.size/2, p.size, p.size);
+    }
+    ctx.globalAlpha = 1;
+
+    // floaters
+    ctx.font = 'bold 16px system-ui, Arial';
+    ctx.textAlign = 'center';
+    for (const f of floaters){
+      ctx.globalAlpha = Math.max(0, f.life/0.8);
+      ctx.fillStyle = f.color; ctx.fillText(f.text, f.x, f.y);
+    }
+    ctx.globalAlpha = 1; ctx.textAlign = 'start';
+
+    // HUD
+    ctx.fillStyle = '#e8eef7';
+    ctx.font = 'bold 18px system-ui, Arial';
+    ctx.fillText('Wave ' + game.wave, 16, 30);
+    ctx.fillStyle = '#ffd75e';
+    ctx.fillText('🪙 ' + game.coins, 16, 54);
+    ctx.fillStyle = hpFrac>0.25?'#7fe0a0':'#ef4444';
+    ctx.fillText('❤ ' + Math.ceil(game.hp) + '/' + game.maxHp, 16, 78);
+    // enemies remaining
+    ctx.fillStyle = '#8aa0c8';
+    ctx.textAlign = 'right';
+    ctx.fillText('Enemies: ' + (enemies.length + toSpawn), W-16, 30);
+    ctx.textAlign = 'start';
+  }
+
+  // ---- Main Loop ----
+  let last = performance.now();
+  function loop(now) {
+    let dt = (now - last) / 1000; last = now;
+    if (dt > 0.05) dt = 0.05; // clamp
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  // ---- Input ----
+  function pos(e) {
+    const t = e.touches ? e.touches[0] : e;
+    return { x: t.clientX, y: t.clientY };
+  }
+  function onDown(e){
+    if (state !== State.PLAYING) return;
+    e.preventDefault();
+    aiming = true; const p = pos(e); aimX = p.x; aimY = p.y;
+    playerCooldown = 0; // fire immediately
+  }
+  function onMove(e){
+    if (!aiming) return; e.preventDefault();
+    const p = pos(e); aimX = p.x; aimY = p.y;
+  }
+  function onUp(e){ aiming = false; }
+  canvas.addEventListener('touchstart', onDown, {passive:false});
+  canvas.addEventListener('touchmove', onMove, {passive:false});
+  canvas.addEventListener('touchend', onUp);
+  canvas.addEventListener('mousedown', onDown);
+  canvas.addEventListener('mousemove', onMove);
+  canvas.addEventListener('mouseup', onUp);
+
+  // ---- UI ----
+  function hideAll(){ document.querySelectorAll('.overlay').forEach(o=>o.classList.remove('show')); }
+  function show(id){ hideAll(); document.getElementById(id).classList.add('show'); }
+
+  function showShop() {
+    document.getElementById('shopTitle').textContent = `Wave ${game.wave} Cleared!`;
+    document.getElementById('shopCoins').textContent = game.coins;
+    renderUpgrades();
+    show('shopScreen');
+  }
+
+  function renderUpgrades() {
+    const offense = ['fireRate','damage','autoTurret','autoPower'];
+    const defense = ['maxHp','regen'];
+    const offEl = document.getElementById('offenseUpgrades');
+    const defEl = document.getElementById('defenseUpgrades');
+    offEl.innerHTML = ''; defEl.innerHTML = '';
+    const build = (key, container) => {
+      const u = upgrades[key];
+      const lvl = game.lv[key];
+      const maxed = lvl >= u.max;
+      const cost = upgradeCost(key);
+      const btn = document.createElement('button');
+      btn.className = 'up';
+      btn.disabled = maxed || game.coins < cost;
+      btn.innerHTML = `<span class="cost">${maxed?'MAX':'🪙'+cost}</span>
+        <span class="name">${u.name}</span>
+        <span class="lvl">Lv ${lvl}${maxed?'':' → '+(lvl+1)}</span><br>
+        <span style="color:#8aa0c8;font-size:11px">${u.desc}</span>`;
+      btn.onclick = () => {
+        const c = upgradeCost(key);
+        if (game.coins >= c && game.lv[key] < u.max) {
+          game.coins -= c; game.lv[key]++; u.apply();
+          document.getElementById('shopCoins').textContent = game.coins;
+          renderUpgrades();
+        }
+      };
+      container.appendChild(btn);
+    };
+    offense.forEach(k=>build(k, offEl));
+    defense.forEach(k=>build(k, defEl));
+  }
+
+  document.getElementById('startBtn').onclick = startGame;
+  document.getElementById('restartBtn').onclick = startGame;
+  document.getElementById('nextWaveBtn').onclick = startWave;
+
+  // show start
+  show('startScreen');
+})();
+</script>
+</body>
+</html>

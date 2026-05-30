@@ -28,4 +28,8 @@ To play a game:
 
 ## Available Games
 
+- **clicker-game** — Incremental/idle clicker with upgrades
+- **snake-game** — Classic snake with touch controls
+- **tower-defender** — Hold-to-aim turret defense with waves, coins, and an upgrade shop (offense + defense). Difficulty adapts to your skill.
+
 Check the `games/` folder for pre-built games ready to play!
