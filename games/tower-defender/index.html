@@ -94,7 +94,7 @@
     canvas.width = W * DPR; canvas.height = H * DPR;
     canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    stick.restX = W / 2; stick.restY = H - 110;
+    stick.restX = W / 2; stick.restY = H - 50;
   }
   window.addEventListener('resize', resize);
 
@@ -103,8 +103,8 @@
   let state = State.START;
 
   const game = {
-    cx: 0, cy: 0,
-    towerRadius: 64,
+    cx: 0, cy: 0,                    // tower center (bottom of screen)
+    towerRadius: 60,
     coins: 0,
     wave: 0,
     bestWave: 0,
@@ -112,8 +112,8 @@
     hpRegen: 0,
     fireRate: 2.0,
     damage: 8,
-    bulletSpeed: 520,
-    autoTurrets: [],
+    bulletSpeed: 540,
+    autoTurrets: [],                 // {angle, level, cooldown}
     autoDamage: 5,
     autoFireRate: 1.0,
     lv: { fireRate:0, damage:0, autoTurret:0, autoPower:0, maxHp:0, regen:0 },
@@ -127,13 +127,13 @@
 
   let toSpawn = 0, spawnTimer = 0, spawnInterval = 0.85;
   let waveStartHp = 100;
-  let waveClosestGap = Infinity; // how close (px past tower edge) any enemy got this wave
+  let waveClosestGap = Infinity;
 
-  // ---- Joystick ----
+  // ---- Joystick (mirrored) ----
   const stick = {
     active: false, id: null,
     baseX: 0, baseY: 0, knobX: 0, knobY: 0,
-    restX: 0, restY: 0, baseR: 60, knobR: 30, deadzone: 0.22,
+    restX: 0, restY: 0, baseR: 70, knobR: 35, deadzone: 0.22,
     angle: 0, mag: 0,
   };
   let aiming = false, aimAngle = -Math.PI/2;
@@ -153,7 +153,6 @@
                   apply:()=>{ game.maxHp += 30; } },
     regen:      { name:'HP Regen',     desc:'+1.2 HP/sec', base:45, growth:1.55, max:20,
                   apply:()=>{ game.hpRegen += 1.2; } },
-    // repair is special: repeatable, heals, cost scales with wave, disabled at full HP
     repair:     { name:'Repair Tower', desc:'Restore 40 HP', repair:true, healAmount:40 },
   };
   function upgradeCost(key) {
@@ -164,16 +163,32 @@
 
   function addAutoTurret() {
     game.autoTurrets.push({ angle: 0, cooldown: 0 });
-    const count = game.autoTurrets.length;
-    game.autoTurrets.forEach((t, i) => { t.angle = (i / count) * Math.PI * 2 - Math.PI/2; });
+    layoutAutoTurrets();
+  }
+
+  function layoutAutoTurrets() {
+    // 4 turrets: 2 left, 2 right
+    // upper-left, lower-left, upper-right, lower-right
+    const positions = [
+      { angle: Math.PI + 0.4, offsetR: 48 },   // upper-left
+      { angle: Math.PI - 0.4, offsetR: 48 },   // lower-left
+      { angle: 0 + 0.4, offsetR: 48 },         // upper-right
+      { angle: 0 - 0.4, offsetR: 48 },         // lower-right
+    ];
+    game.autoTurrets.forEach((t, i) => {
+      if (i < positions.length) {
+        t.angle = positions[i].angle;
+        t.offsetR = positions[i].offsetR;
+      }
+    });
   }
 
   // ---- Flow ----
   function resetGame() {
-    game.cx = W/2; game.cy = H/2;
+    game.cx = W/2; game.cy = H - 120;
     game.coins = 0; game.wave = 0;
     game.maxHp = 100; game.hp = 100; game.hpRegen = 0;
-    game.fireRate = 2.0; game.damage = 8; game.bulletSpeed = 520;
+    game.fireRate = 2.0; game.damage = 8; game.bulletSpeed = 540;
     game.autoTurrets = []; game.autoDamage = 5; game.autoFireRate = 1.0;
     game.lv = { fireRate:0, damage:0, autoTurret:0, autoPower:0, maxHp:0, regen:0 };
     game.diff = 0.9;
@@ -183,10 +198,9 @@
   function startGame() { resetGame(); hideAll(); startWave(); }
 
   function startWave() {
-    game.cx = W/2; game.cy = H/2;
+    game.cx = W/2; game.cy = H - 120;
     game.wave++;
     game.bestWave = Math.max(game.bestWave, game.wave);
-    // gentle, predictable scaling early
     toSpawn = Math.round(5 + game.wave * 1.5 + (game.diff - 1) * 4);
     toSpawn = Math.max(4, toSpawn);
     spawnTimer = 0;
@@ -198,17 +212,15 @@
   }
 
   function endWave() {
-    // ---- Adaptive difficulty (proximity + HP based) ----
-    // How close did the nearest enemy get to breaching? (gap in px past tower edge)
     const gap = Math.max(0, waveClosestGap === Infinity ? 400 : waveClosestGap);
-    const proximityDanger = 1 - Math.min(1, gap / 220);   // 1 = enemies nearly breached
+    const proximityDanger = 1 - Math.min(1, gap / 220);
     const hpLostFrac = Math.max(0, (waveStartHp - game.hp)) / game.maxHp;
     const threat = Math.max(proximityDanger, hpLostFrac * 1.2);
 
-    if (threat < 0.20) game.diff *= 1.15;        // dominated -> ramp up
-    else if (threat < 0.40) game.diff *= 1.08;   // comfortable
-    else if (threat < 0.65) game.diff *= 1.02;   // tense (ideal)
-    else game.diff *= 0.95;                       // nearly breached -> ease off
+    if (threat < 0.20) game.diff *= 1.15;
+    else if (threat < 0.40) game.diff *= 1.08;
+    else if (threat < 0.65) game.diff *= 1.02;
+    else game.diff *= 0.95;
     game.diff = Math.max(0.8, Math.min(game.diff, 6));
 
     game.coins += 8 + game.wave * 3;
@@ -247,11 +259,11 @@
 
     let hp, speed, r, reward, color;
     if (type === 'tank') {
-      hp = (34 + w*9) * d; speed = 26 + w*1.0; r = 20; reward = 7 + Math.floor(w*0.7); color = '#c0563f';
+      hp = (34 + w*9) * d; speed = 26 + w*1.0; r = 22; reward = 7 + Math.floor(w*0.7); color = '#c0563f';
     } else if (type === 'fast') {
-      hp = (8 + w*3) * d; speed = 66 + w*2.5; r = 10; reward = 4 + Math.floor(w*0.4); color = '#5ad6e0';
+      hp = (8 + w*3) * d; speed = 66 + w*2.5; r = 11; reward = 4 + Math.floor(w*0.4); color = '#5ad6e0';
     } else {
-      hp = (12 + w*4) * d; speed = 40 + w*1.6; r = 14; reward = 3 + Math.floor(w*0.4); color = '#9b8cff';
+      hp = (12 + w*4) * d; speed = 40 + w*1.6; r = 15; reward = 3 + Math.floor(w*0.4); color = '#9b8cff';
     }
     enemies.push({ x, y, hp, maxHp:hp, speed, r, reward, type, color, hitFlash:0 });
   }
@@ -259,14 +271,14 @@
   // ---- Firing ----
   function fireFromPlayer() {
     const c = Math.cos(aimAngle), s = Math.sin(aimAngle);
-    const mx = game.cx + c*26, my = game.cy + s*26;
+    const mx = game.cx + c*28, my = game.cy + s*28;
     bullets.push({ x:mx, y:my, vx:c*game.bulletSpeed, vy:s*game.bulletSpeed, dmg:game.damage, r:5, color:'#ffe27a', life:2 });
     spawnMuzzle(mx, my, c, s);
   }
 
   function fireAutoTurret(t) {
-    const tx = game.cx + Math.cos(t.angle) * (game.towerRadius - 16);
-    const ty = game.cy + Math.sin(t.angle) * (game.towerRadius - 16);
+    const tx = game.cx + Math.cos(t.angle) * (t.offsetR || 48);
+    const ty = game.cy + Math.sin(t.angle) * (t.offsetR || 48);
     let best = null, bestD = Infinity;
     for (const e of enemies) {
       const d = (e.x-tx)**2 + (e.y-ty)**2;
@@ -281,16 +293,16 @@
 
   // ---- Particles ----
   function spawnHit(x, y, color) {
-    for (let i=0;i<6;i++){ const a=Math.random()*Math.PI*2, s=40+Math.random()*120;
+    for (let i=0;i<8;i++){ const a=Math.random()*Math.PI*2, s=40+Math.random()*120;
       particles.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:0.4, maxLife:0.4, color, size:2+Math.random()*2 }); }
   }
   function spawnDeath(x, y, color) {
-    for (let i=0;i<14;i++){ const a=Math.random()*Math.PI*2, s=60+Math.random()*180;
-      particles.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:0.6, maxLife:0.6, color, size:2+Math.random()*3 }); }
+    for (let i=0;i<16;i++){ const a=Math.random()*Math.PI*2, s=60+Math.random()*180;
+      particles.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:0.6, maxLife:0.6, color, size:2.5+Math.random()*3.5 }); }
   }
   function spawnMuzzle(x, y, dx, dy) {
-    for (let i=0;i<3;i++){ const spread=(Math.random()-0.5)*0.6, a=Math.atan2(dy,dx)+spread, s=80+Math.random()*120;
-      particles.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:0.18, maxLife:0.18, color:'#ffd75e', size:2 }); }
+    for (let i=0;i<5;i++){ const spread=(Math.random()-0.5)*0.7, a=Math.atan2(dy,dx)+spread, s=100+Math.random()*140;
+      particles.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:0.2, maxLife:0.2, color:'#ffd75e', size:2.5 }); }
   }
   function addFloater(x,y,text,color){ floaters.push({x,y,text,life:0.8,color}); }
 
@@ -336,7 +348,7 @@
       const e = enemies[j];
       const dx = game.cx - e.x, dy = game.cy - e.y;
       const dist = Math.hypot(dx, dy) || 1;
-      const gap = dist - game.towerRadius - e.r;     // how close to breaching
+      const gap = dist - game.towerRadius - e.r;
       if (gap < waveClosestGap) waveClosestGap = gap;
       if (dist > game.towerRadius + e.r - 4) {
         e.x += dx/dist * e.speed * dt; e.y += dy/dist * e.speed * dt;
@@ -363,9 +375,17 @@
   // ---- Render ----
   function draw() {
     ctx.clearRect(0,0,W,H);
+    // starfield background
     ctx.fillStyle = '#0a0e1a'; ctx.fillRect(0,0,W,H);
-    ctx.strokeStyle = 'rgba(40,55,90,0.25)'; ctx.lineWidth = 1;
-    const g = 40; ctx.beginPath();
+    ctx.globalAlpha = 0.6;
+    for (let i=0; i<30; i++) {
+      const sx = (i*723) % W, sy = (i*197) % H;
+      ctx.fillStyle = i%2===0 ? 'rgba(100,150,200,0.3)' : 'rgba(80,120,180,0.2)';
+      ctx.fillRect(sx, sy, 1, 1);
+    }
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = 'rgba(40,55,90,0.15)'; ctx.lineWidth = 1;
+    const g = 50; ctx.beginPath();
     for (let x=0;x<W;x+=g){ ctx.moveTo(x,0); ctx.lineTo(x,H); }
     for (let y=0;y<H;y+=g){ ctx.moveTo(0,y); ctx.lineTo(W,y); }
     ctx.stroke();
@@ -374,71 +394,130 @@
 
     const {cx, cy, towerRadius} = game;
 
-    ctx.beginPath(); ctx.arc(cx,cy,towerRadius,0,Math.PI*2);
-    ctx.fillStyle = 'rgba(50,70,120,0.25)'; ctx.fill();
-    ctx.lineWidth = 3; ctx.strokeStyle = '#3b5a9c'; ctx.stroke();
-    const hpFrac = game.hp/game.maxHp;
-    ctx.beginPath();
-    ctx.arc(cx,cy,towerRadius+6,-Math.PI/2, -Math.PI/2 + Math.PI*2*hpFrac);
-    ctx.lineWidth = 5;
-    ctx.strokeStyle = hpFrac>0.5?'#5ad67a':(hpFrac>0.25?'#ffd75e':'#ef4444');
-    ctx.stroke();
+    // draw tower structure
+    drawTower(cx, cy);
 
-    for (const t of game.autoTurrets){
-      const tx = cx + Math.cos(t.angle)*(towerRadius-16);
-      const ty = cy + Math.sin(t.angle)*(towerRadius-16);
-      ctx.beginPath(); ctx.arc(tx,ty,9,0,Math.PI*2);
-      ctx.fillStyle = '#2f7f55'; ctx.fill();
-      ctx.lineWidth=2; ctx.strokeStyle='#7fe0a0'; ctx.stroke();
-    }
-
-    // player turret
-    ctx.save(); ctx.translate(cx,cy); ctx.rotate(aimAngle);
-    ctx.fillStyle = aiming ? '#ffe27a' : '#ffd75e';
-    ctx.fillRect(0,-5,30,10);
-    ctx.restore();
-    ctx.beginPath(); ctx.arc(cx,cy,16,0,Math.PI*2);
-    ctx.fillStyle = '#e8a13e'; ctx.fill();
-    ctx.lineWidth=3; ctx.strokeStyle='#fff2c4'; ctx.stroke();
-
+    // enemies
     for (const e of enemies){
       ctx.beginPath(); ctx.arc(e.x,e.y,e.r,0,Math.PI*2);
       ctx.fillStyle = e.hitFlash>0 ? '#ffffff' : e.color; ctx.fill();
-      ctx.lineWidth=2; ctx.strokeStyle='rgba(0,0,0,0.4)'; ctx.stroke();
+      ctx.lineWidth=2; ctx.strokeStyle='rgba(0,0,0,0.5)'; ctx.stroke();
+      // hp bar
       if (e.hp < e.maxHp){
         const bw = e.r*2, f = Math.max(0,e.hp/e.maxHp);
-        ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(e.x-e.r, e.y-e.r-8, bw, 4);
+        ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(e.x-e.r, e.y-e.r-8, bw, 4);
         ctx.fillStyle='#ff5e5e'; ctx.fillRect(e.x-e.r, e.y-e.r-8, bw*f, 4);
       }
     }
 
-    for (const b of bullets){ ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.fillStyle=b.color; ctx.fill(); }
+    // bullets
+    for (const b of bullets){
+      ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2);
+      ctx.fillStyle=b.color; ctx.fill();
+      // glow
+      ctx.globalAlpha = 0.3;
+      ctx.beginPath(); ctx.arc(b.x,b.y,b.r*2.5,0,Math.PI*2);
+      ctx.fillStyle=b.color; ctx.fill();
+      ctx.globalAlpha = 1;
+    }
 
+    // particles
     for (const p of particles){
       ctx.globalAlpha = Math.max(0, p.life/p.maxLife);
-      ctx.fillStyle = p.color; ctx.fillRect(p.x-p.size/2, p.y-p.size/2, p.size, p.size);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x-p.size/2, p.y-p.size/2, p.size, p.size);
     }
     ctx.globalAlpha = 1;
 
-    ctx.font = 'bold 16px system-ui, Arial'; ctx.textAlign = 'center';
+    // floaters
+    ctx.font = 'bold 18px system-ui, Arial';
+    ctx.textAlign = 'center';
     for (const f of floaters){
       ctx.globalAlpha = Math.max(0, f.life/0.8);
       ctx.fillStyle = f.color; ctx.fillText(f.text, f.x, f.y);
     }
     ctx.globalAlpha = 1; ctx.textAlign = 'start';
 
-    // ---- Joystick ----
+    // joystick
     if (state === State.PLAYING) drawStick();
 
     // HUD
-    ctx.fillStyle = '#e8eef7'; ctx.font = 'bold 18px system-ui, Arial';
+    ctx.fillStyle = '#e8eef7';
+    ctx.font = 'bold 18px system-ui, Arial';
     ctx.fillText('Wave ' + game.wave, 16, 30);
-    ctx.fillStyle = '#ffd75e'; ctx.fillText('🪙 ' + game.coins, 16, 54);
+    ctx.fillStyle = '#ffd75e';
+    ctx.fillText('🪙 ' + game.coins, 16, 54);
+    const hpFrac = game.hp/game.maxHp;
     ctx.fillStyle = hpFrac>0.25?'#7fe0a0':'#ef4444';
     ctx.fillText('❤ ' + Math.ceil(game.hp) + '/' + game.maxHp, 16, 78);
-    ctx.fillStyle = '#8aa0c8'; ctx.textAlign = 'right';
+    ctx.fillStyle = '#8aa0c8';
+    ctx.textAlign = 'right';
     ctx.fillText('Enemies: ' + (enemies.length + toSpawn), W-16, 30);
     ctx.textAlign = 'start';
+  }
+
+  function drawTower(cx, cy) {
+    const hpFrac = game.hp/game.maxHp;
+
+    // castle wall (above main turret)
+    ctx.fillStyle = '#3d4d66';
+    ctx.fillRect(cx - 56, cy - 76, 112, 36);
+    // wall details (crenellations)
+    ctx.fillStyle = '#2a3a52';
+    for (let i=0; i<6; i++) {
+      const wx = cx - 48 + i*19;
+      ctx.fillRect(wx, cy - 84, 8, 8);
+    }
+    // wall outline
+    ctx.lineWidth = 2; ctx.strokeStyle = '#6b8ab8';
+    ctx.strokeRect(cx - 56, cy - 76, 112, 36);
+
+    // tower circle (defense zone)
+    ctx.beginPath(); ctx.arc(cx, cy, game.towerRadius, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(50,70,120,0.2)'; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(107,138,184,0.4)'; ctx.stroke();
+
+    // HP ring
+    ctx.beginPath();
+    ctx.arc(cx, cy, game.towerRadius + 8, -Math.PI/2, -Math.PI/2 + Math.PI*2*hpFrac);
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = hpFrac>0.5?'#5ad67a':(hpFrac>0.25?'#ffd75e':'#ef4444');
+    ctx.stroke();
+
+    // auto turrets (2 left, 2 right)
+    for (const t of game.autoTurrets){
+      const tx = cx + Math.cos(t.angle) * (t.offsetR || 48);
+      const ty = cy + Math.sin(t.angle) * (t.offsetR || 48);
+
+      ctx.beginPath(); ctx.arc(tx, ty, 12, 0, Math.PI*2);
+      ctx.fillStyle = '#2f7f55'; ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = '#7fe0a0'; ctx.stroke();
+
+      // turret barrel
+      const barrelAngle = Math.atan2(cy - ty, cx - tx);
+      ctx.save(); ctx.translate(tx, ty); ctx.rotate(barrelAngle);
+      ctx.fillStyle = '#5ad6a0';
+      ctx.fillRect(2, -3, 14, 6);
+      ctx.restore();
+    }
+
+    // main turret barrel + base
+    ctx.beginPath(); ctx.arc(cx, cy, 18, 0, Math.PI*2);
+    ctx.fillStyle = '#e8a13e'; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = '#fff2c4'; ctx.stroke();
+
+    // barrel
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(aimAngle);
+    ctx.fillStyle = aiming ? '#ffe27a' : '#ffd75e';
+    ctx.fillRect(0, -6, 32, 12);
+    // barrel tip glow (when firing)
+    if (playerCooldown < 0.08) {
+      ctx.globalAlpha = 1 - (playerCooldown / 0.08);
+      ctx.fillStyle = '#ffe27a';
+      ctx.fillRect(28, -4, 8, 8);
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
   }
 
   function drawStick() {
@@ -446,18 +525,22 @@
     const by = stick.active ? stick.baseY : stick.restY;
     const kx = stick.active ? stick.knobX : stick.restX;
     const ky = stick.active ? stick.knobY : stick.restY;
-    ctx.globalAlpha = stick.active ? 0.5 : 0.28;
+
+    // base
+    ctx.globalAlpha = stick.active ? 0.55 : 0.3;
     ctx.beginPath(); ctx.arc(bx, by, stick.baseR, 0, Math.PI*2);
     ctx.fillStyle = '#1d2740'; ctx.fill();
-    ctx.lineWidth = 2; ctx.strokeStyle = '#3b5a9c'; ctx.stroke();
-    ctx.globalAlpha = stick.active ? 0.95 : 0.5;
+    ctx.lineWidth = 2.5; ctx.strokeStyle = '#3b5a9c'; ctx.stroke();
+
+    // knob
+    ctx.globalAlpha = stick.active ? 1 : 0.6;
     ctx.beginPath(); ctx.arc(kx, ky, stick.knobR, 0, Math.PI*2);
     ctx.fillStyle = '#3b82f6'; ctx.fill();
-    ctx.lineWidth = 2; ctx.strokeStyle = '#9bc0ff'; ctx.stroke();
+    ctx.lineWidth = 2.5; ctx.strokeStyle = '#60a5fa'; ctx.stroke();
     ctx.globalAlpha = 1;
   }
 
-  // ---- Loop ----
+  // ---- Main Loop ----
   let last = performance.now();
   function loop(now) {
     let dt = (now - last) / 1000; last = now;
@@ -466,7 +549,7 @@
     requestAnimationFrame(loop);
   }
 
-  // ---- Input (floating joystick in lower screen band) ----
+  // ---- Input (mirrored joystick) ----
   function getTouchById(e, id) {
     for (const t of e.changedTouches) if (t.identifier === id) return t;
     return null;
@@ -483,7 +566,8 @@
     stick.knobX = stick.baseX + dx; stick.knobY = stick.baseY + dy;
     stick.mag = Math.min(1, dist / stick.baseR);
     if (stick.mag > stick.deadzone) {
-      stick.angle = Math.atan2(dy, dx);
+      // MIRRORED: invert X (left on stick = right angle, right on stick = left angle)
+      stick.angle = Math.atan2(dy, -dx);
       aimAngle = stick.angle; aiming = true;
     } else { aiming = false; }
   }
@@ -496,7 +580,6 @@
     e.preventDefault();
     if (stick.active) return;
     for (const t of e.changedTouches) {
-      // activate joystick from anywhere; base appears at touch point
       startStick(t.clientX, t.clientY, t.identifier);
       break;
     }
@@ -516,7 +599,7 @@
   canvas.addEventListener('touchend', onTouchEnd);
   canvas.addEventListener('touchcancel', onTouchEnd);
 
-  // mouse fallback for desktop testing
+  // mouse fallback
   canvas.addEventListener('mousedown', e => { if (state===State.PLAYING) startStick(e.clientX, e.clientY, 'mouse'); });
   canvas.addEventListener('mousemove', e => { if (stick.active) updateStick(e.clientX, e.clientY); });
   window.addEventListener('mouseup', () => { if (stick.active) endStick(); });
@@ -533,7 +616,13 @@
   }
 
   function renderUpgrades() {
-    const offense = ['fireRate','damage','autoTurret','autoPower'];
+    const offense = ['fireRate','damage'];
+    // only show autoTurret/autoPower if they have at least one auto turret
+    if (game.autoTurrets.length > 0) {
+      offense.push('autoTurret','autoPower');
+    } else {
+      offense.push('autoTurret');  // always show BUILD option
+    }
     const defense = ['maxHp','regen','repair'];
     const offEl = document.getElementById('offenseUpgrades');
     const defEl = document.getElementById('defenseUpgrades');
@@ -542,17 +631,27 @@
       const u = upgrades[key];
       const cost = upgradeCost(key);
       const isRepair = !!u.repair;
-      const lvl = isRepair ? null : game.lv[key];
-      const maxed = !isRepair && lvl >= u.max;
+      const isBuild = key === 'autoTurret';
+      const lvl = isRepair || isBuild ? null : game.lv[key];
+      const maxed = !isRepair && !isBuild && lvl >= u.max;
       const cantAfford = game.coins < cost;
       const repairFull = isRepair && game.hp >= game.maxHp;
+
+      // hide autoPower if no auto turrets yet
+      if (key === 'autoPower' && game.autoTurrets.length === 0) return;
+
       const btn = document.createElement('button');
       btn.className = 'up';
       btn.disabled = maxed || cantAfford || repairFull;
       const right = maxed ? 'MAX' : (repairFull ? 'FULL' : '🪙'+cost);
-      const lvlLine = isRepair
-        ? `<span class="lvl">${Math.ceil(game.hp)}/${game.maxHp} HP</span>`
-        : `<span class="lvl">Lv ${lvl}${maxed?'':' → '+(lvl+1)}</span>`;
+      let lvlLine;
+      if (isRepair) {
+        lvlLine = `<span class="lvl">${Math.ceil(game.hp)}/${game.maxHp} HP</span>`;
+      } else if (isBuild) {
+        lvlLine = `<span class="lvl">${game.autoTurrets.length}/${upgrades.autoTurret.max} built</span>`;
+      } else {
+        lvlLine = `<span class="lvl">Lv ${lvl}${maxed?'':' → '+(lvl+1)}</span>`;
+      }
       btn.innerHTML = `<span class="cost">${right}</span>
         <span class="name">${u.name}</span>
         ${lvlLine}<br>
@@ -564,8 +663,11 @@
           if (game.hp >= game.maxHp) return;
           game.coins -= c; game.hp = Math.min(game.maxHp, game.hp + u.healAmount);
         } else {
-          if (game.lv[key] >= u.max) return;
-          game.coins -= c; game.lv[key]++; u.apply();
+          if (isBuild && game.autoTurrets.length >= u.max) return;
+          if (!isBuild && game.lv[key] >= u.max) return;
+          game.coins -= c;
+          if (isBuild) u.apply();
+          else { game.lv[key]++; u.apply(); }
         }
         document.getElementById('shopCoins').textContent = game.coins;
         renderUpgrades();
