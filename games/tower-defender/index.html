@@ -81,7 +81,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 const HALF_W = 15, SPAWN_Z = -52, WALL_Z = 0, MAX_YAW = 1.25, BULLET_SPEED = 46, AUTO_BULLET_SPEED = 42;
-const TOWER_DMG_SCALE = 0.6; // Tower damage = enemy remaining HP × this scale
+const TOWER_DMG_SCALE = 1.0; // Tower damage = enemy remaining HP (1:1)
 let soundEnabled = true;
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 function playSound(freq, duration, type='sine', volume=0.1) {
@@ -374,6 +374,7 @@ const State = { START:0, PLAYING:1, SHOP:2, GAMEOVER:3, PAUSE:4, WAVE_SUMMARY:5 
 let state = State.START, prevState = State.START;
 let yaw = 0, playerCooldown = 0, toSpawn = 0, spawnTimer = 0, spawnInterval = 0.85;
 let waveStartHp = 100, waveClosestGap = Infinity, shakeT = 0;
+let spawnQueue = [], spawnIndex = 0;
 let clock = new THREE.Clock();
 const enemies = [];
 let mainBulletsFired = 0, mainBulletsHit = 0;
@@ -443,47 +444,28 @@ function addFloater(x, y, z, text, color) {
   floaters.push({ sp, life: 1.2 });
 }
 
-// Enemies (significantly bigger)
+// Enemies — size, shape, color & speed all derived from HP
 function spawnEnemy() {
-  const w = game.wave;
-  let type = 'grunt'; const roll = Math.random();
-  if (w >= 5 && roll < 0.15) type = 'tank';
-  else if (w >= 3 && roll < 0.40) type = 'fast';
-
-  // Distribute expected wave HP across enemies by type ratio
-  const typeWeights = { tank: 3.0, fast: 0.7, grunt: 1.0 };
-  const weight = typeWeights[type];
-
-  // Rough type distribution: 15% tank (3.0), 25% fast (0.7), 60% grunt (1.0)
-  const tankWeight = toSpawn > 0 ? toSpawn * 0.15 * 3.0 : 0;
-  const fastWeight = toSpawn > 0 ? toSpawn * 0.25 * 0.7 : 0;
-  const gruntWeight = toSpawn > 0 ? toSpawn * 0.60 * 1.0 : 0;
-  const totalWeight = tankWeight + fastWeight + gruntWeight || 3.7;
-
-  // HP allocation: portion of total wave HP
-  const hpAllocation = (weight / totalWeight) * expectedNextWaveHP;
-
-  let hp, speed;
-  if (type === 'tank') { hp = hpAllocation * 0.85; speed = 1.3 + w * 0.05; }
-  else if (type === 'fast') { hp = hpAllocation * 0.90; speed = 3.0 + w * 0.14; }
-  else { hp = hpAllocation * 1.1; speed = 1.95 + w * 0.08; }
+  // Pull this enemy's HP from the precomputed wave composition
+  let hp = spawnQueue[spawnIndex] != null ? spawnQueue[spawnIndex] : 8;
+  spawnIndex++;
   hp = Math.max(8, hp);
 
-  // Coins earned per wave are fixed; distribute evenly (simplified reward)
+  // Coins earned per wave are fixed; distribute evenly across enemies
   const baseRewardPerWave = ECONOMY.baseWaveCoins + game.wave * ECONOMY.coinPerWave;
-  const reward = Math.round(baseRewardPerWave / Math.max(1, toSpawn));
+  const reward = Math.round(baseRewardPerWave / Math.max(1, spawnQueue.length));
 
   // Size proportional to HP: radius scales with cube root so volume ~ HP
-  // Reference: 20 HP → r≈1.2, scales up from there
   const r = Math.max(0.9, Math.min(3.4, 0.55 * Math.cbrt(hp)));
 
-  // Shape & color tier based on size (more sides as HP/size grows)
-  // Tier thresholds by radius
+  // Speed: smaller enemies are faster; everything slowly speeds up per wave
+  const baseSpeed = 1.3 + game.wave * 0.06;
+  const speed = baseSpeed * (1.9 / (r + 0.7));
+
+  // Shape & color tier based on size (more sides as it grows)
   const tier = r < 1.2 ? 0 : r < 1.6 ? 1 : r < 2.1 ? 2 : r < 2.7 ? 3 : 4;
-  // Color ramp: small=teal/blue → large=orange/red
-  const tierColor =  [0x35c8a0, 0x4a9ae8, 0x8a6ae0, 0xe0902a, 0xd83838][tier];
-  const tierEye =    [0x9fffe0, 0x9fd0ff, 0xd8b8ff, 0xffd28a, 0xff8a6a][tier];
-  const color = tierColor, eyeColor = tierEye;
+  const color =    [0x35c8a0, 0x4a9ae8, 0x8a6ae0, 0xe0902a, 0xd83838][tier];
+  const eyeColor = [0x9fffe0, 0x9fd0ff, 0xd8b8ff, 0xffd28a, 0xff8a6a][tier];
 
   const g = new THREE.Group();
   const x = (Math.random() * 2 - 1) * (HALF_W - 2);
@@ -491,31 +473,24 @@ function spawnEnemy() {
 
   // Geometry tier: increasing face count as size grows
   let geo;
-  if (type === 'fast') {
-    geo = new THREE.ConeGeometry(r * 0.9, r * 2.4, Math.max(6, 4 + tier * 3));
-  } else {
-    switch (tier) {
-      case 0: geo = new THREE.TetrahedronGeometry(r, 0); break;   // 4 faces
-      case 1: geo = new THREE.BoxGeometry(r*1.4, r*1.4, r*1.4); break; // 6 faces
-      case 2: geo = new THREE.OctahedronGeometry(r, 0); break;    // 8 faces
-      case 3: geo = new THREE.DodecahedronGeometry(r, 0); break;  // 12 faces
-      default: geo = new THREE.IcosahedronGeometry(r, 1); break;  // 20+ faces
-    }
+  switch (tier) {
+    case 0: geo = new THREE.TetrahedronGeometry(r, 0); break;        // 4 faces
+    case 1: geo = new THREE.BoxGeometry(r*1.4, r*1.4, r*1.4); break; // 6 faces
+    case 2: geo = new THREE.OctahedronGeometry(r, 0); break;         // 8 faces
+    case 3: geo = new THREE.DodecahedronGeometry(r, 0); break;       // 12 faces
+    default: geo = new THREE.IcosahedronGeometry(r, 1); break;       // 20+ faces
   }
   const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.65, emissive: eyeColor, emissiveIntensity: 0.6 });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.y = r;
   mesh.castShadow = true;
   mesh.receiveShadow = true;
-  if (type === 'fast') mesh.rotation.x = Math.PI / 2;
   g.add(mesh);
 
-  if (type !== 'fast') {
-    const eyeMat = new THREE.MeshBasicMaterial({ color: eyeColor });
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(r*0.32, 12, 12), eyeMat);
-    eye.position.set(0, r + 0.3, r * 0.85);
-    g.add(eye);
-  }
+  const eyeMat = new THREE.MeshBasicMaterial({ color: eyeColor });
+  const eye = new THREE.Mesh(new THREE.SphereGeometry(r*0.32, 12, 12), eyeMat);
+  eye.position.set(0, r + 0.3, r * 0.85);
+  g.add(eye);
 
   const shadowGeo = new THREE.CircleGeometry(r*2.0, 18);
   const shadowMesh = new THREE.Mesh(shadowGeo, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.5, depthWrite: false }));
@@ -529,8 +504,7 @@ function spawnEnemy() {
   barFill.position.set(-r * 1.25, r * 2.5, 0.01); barFill.visible = false; g.add(barFill);
 
   scene.add(g);
-  waveEnemyHP += hp;
-  enemies.push({ g, mesh, mat, baseEI: 0.6, x, z: SPAWN_Z, hp, maxHp: hp, speed, r, reward, type, color, eyeColor,
+  enemies.push({ g, mesh, mat, baseEI: 0.6, x, z: SPAWN_Z, hp, maxHp: hp, speed, r, reward, color, eyeColor,
     hitFlash: 0, bob: Math.random() * Math.PI * 2, barBg, barFill, barW: r * 2.5 });
 }
 
@@ -594,16 +568,40 @@ function startWave() {
   expectedNextWaveHP = waveHP;
   expectedNextDPS = playerMainDPS;
 
-  // Spawn enemies
-  const numEnemies = Math.max(4, Math.round(5 + game.wave * 1.2));
-  toSpawn = numEnemies;
+  // Build wave composition: a list of enemy HP values that sum EXACTLY to waveHP
+  spawnQueue = buildWaveComposition(waveHP, game.wave);
+  spawnIndex = 0;
+  toSpawn = spawnQueue.length;
 
   spawnTimer = 0;
   spawnInterval = Math.max(0.3, 0.9 - game.wave * 0.02);
   waveStartHp = game.hp; waveClosestGap = Infinity;
-  waveEnemyHP = 0;
+  waveEnemyHP = waveHP; // constant for the whole wave
   mainBulletsFired = 0; mainBulletsHit = 0;
   state = State.PLAYING; hideAll();
+}
+
+function buildWaveComposition(waveHP, wave) {
+  // Produce enemy HP chunks summing exactly to waveHP.
+  // Bigger single enemies become possible as waves progress.
+  const queue = [];
+  const minHP = 8;
+  const maxHP = Math.max(minHP * 2, waveHP * (0.18 + Math.min(0.22, wave * 0.015)));
+  let remaining = waveHP;
+  let guard = 0;
+  while (remaining > 0 && guard++ < 200) {
+    if (remaining <= maxHP * 1.1) { queue.push(remaining); break; }
+    let chunk = minHP + Math.random() * (maxHP - minHP);
+    chunk = Math.min(chunk, remaining - minHP); // leave room for at least one more
+    queue.push(chunk);
+    remaining -= chunk;
+  }
+  // Shuffle so big and small enemies are interleaved
+  for (let i = queue.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [queue[i], queue[j]] = [queue[j], queue[i]];
+  }
+  return queue;
 }
 
 function endWave() {
@@ -871,7 +869,7 @@ function updateHUD() {
   const acc = Math.round(accFrac * 100);
   // Effective Damage = Wave Length × (Player DPS × Accuracy + Auto DPS + Regen)
   const effDmg = ECONOMY.waveDuration * ((mainDps * accFrac) + autoDps + game.hpRegen);
-  // Actual difficulty ratio = Effective Damage / Wave HP (using initial wave HP)
+  // Actual difficulty ratio = Effective Damage / Wave HP (constant wave HP)
   const actualRatio = expectedNextWaveHP > 0 ? effDmg / expectedNextWaveHP : 0;
 
   document.getElementById('dashWaveNum').textContent = game.wave;
@@ -881,7 +879,7 @@ function updateHUD() {
   document.getElementById('dashAutoDPS').textContent = autoDps.toFixed(1);
   document.getElementById('dashRegen').textContent = game.hpRegen.toFixed(1) + '/s';
   document.getElementById('dashEffDmg').textContent = effDmg.toFixed(0);
-  document.getElementById('dashWaveHP').textContent = waveEnemyHP.toFixed(0);
+  document.getElementById('dashWaveHP').textContent = expectedNextWaveHP.toFixed(0);
   document.getElementById('dashActualRatio').textContent = actualRatio.toFixed(2);
   document.getElementById('dashTargetRatio').textContent = difficultyRatioTarget.toFixed(2);
   document.getElementById('dashCoins').textContent = game.coins;
@@ -929,7 +927,8 @@ function resetGame() {
   mainBulletsFired = 0; mainBulletsHit = 0;
   lastDiffMultiplier = 1; lastPerformanceRatio = 1; lastCoinsEarned = 0;
   expectedNextWaveHP = 0; expectedNextDPS = 0;
-  lastWaveAccuracy = 0.4; difficultyRatioTarget = 1.2;
+  lastWaveAccuracy = 0.5; difficultyRatioTarget = 1.2;
+  spawnQueue = []; spawnIndex = 0;
 }
 function startGame() { resetGame(); hideAll(); startWave(); }
 
