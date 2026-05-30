@@ -377,6 +377,8 @@ let mainBulletsFired = 0, mainBulletsHit = 0;
 let waveEnemyHP = 0;
 let lastDiffMultiplier = 1, lastPerformanceRatio = 1, lastCoinsEarned = 0;
 let expectedNextWaveHP = 0, expectedNextDPS = 0;
+let lastWaveAccuracy = 0.4; // Start with conservative estimate for wave 1
+let difficultyRatioTarget = 1.2; // Start easier, will decay toward 1.0
 
 // Bullet pool
 const bulletGeo = new THREE.SphereGeometry(0.4, 12, 12);
@@ -551,20 +553,31 @@ function startWave() {
   game.wave++;
   game.bestWave = Math.max(game.bestWave, game.wave);
 
-  // Economic balance equation: calculate expected wave HP
-  // Expected DPS = current DPS × growth factor × difficulty multiplier
-  const mainTurretDPS = game.damage * game.fireRate;
-  const expectedDPS = mainTurretDPS * ECONOMY.dpsGrowthPerWave * game.diff;
-  expectedNextDPS = expectedDPS;
+  // Difficulty Ratio approach: Enemy HP inversely proportional to player effective damage
+  // Difficulty Ratio = (Wave Length × (Player DPS × Player Accuracy + Auto DPS)) / Enemy HP
+  // We set Enemy HP such that Difficulty Ratio = target (starting at 1.2, decaying toward 1.0)
 
-  // Expected total damage = DPS × duration × conservative accuracy estimate (0.6)
-  const accuracyEstimate = 0.6;
-  const expectedTotalDamage = expectedDPS * ECONOMY.waveDuration * accuracyEstimate;
-  expectedNextWaveHP = Math.round(expectedTotalDamage);
+  const playerMainDPS = game.damage * game.fireRate;
+  const playerAutoDPS = game.autoTurrets.length * game.autoDamage * game.autoFireRate;
 
-  // Spawn enemies with calculated HP
+  // Use last wave's actual accuracy, or conservative estimate for wave 1
+  const accuracyForScaling = game.wave === 1 ? 0.4 : lastWaveAccuracy;
+
+  // Decay difficulty ratio over waves: 1.2 → 1.0 over ~15 waves
+  const waveDecay = Math.max(1.0, 1.2 - (game.wave - 1) * 0.015);
+  difficultyRatioTarget = waveDecay;
+
+  // Enemy HP calculation using difficulty ratio
+  // Difficulty Ratio = (Wave Length × (Player DPS × Accuracy + Auto DPS)) / Enemy HP
+  // Enemy HP = (Wave Length × (Player DPS × Accuracy + Auto DPS)) / Difficulty Ratio
+  const effectivePlayerDamage = playerMainDPS * accuracyForScaling;
+  const totalEffectiveDPS = effectivePlayerDamage + playerAutoDPS;
+  const expectedTotalDamage = ECONOMY.waveDuration * totalEffectiveDPS;
+  expectedNextWaveHP = Math.round(expectedTotalDamage / difficultyRatioTarget);
+  expectedNextDPS = playerMainDPS;
+
+  // Spawn enemies
   const numEnemies = Math.max(4, Math.round(5 + game.wave * 1.2));
-  const avgEnemyHP = expectedNextWaveHP / numEnemies;
   toSpawn = numEnemies;
 
   spawnTimer = 0;
@@ -582,25 +595,31 @@ function endWave() {
   const accuracy = mainBulletsFired > 0 ? Math.max(0, mainBulletsHit / mainBulletsFired) : 0.3;
   const effectiveMainDPS = mainTurretDPS * accuracy;
 
-  // Economic balance equation: Total Damage = DPS × Time × Accuracy
-  const actualTotalDamage = effectiveMainDPS * ECONOMY.waveDuration;
-  const performanceRatio = actualTotalDamage / Math.max(1, waveEnemyHP);
-  lastPerformanceRatio = performanceRatio;
+  // Store this wave's accuracy for use in next wave calculation
+  lastWaveAccuracy = accuracy;
 
-  // Determine difficulty multiplier based on performance ratio
-  // Goal: keep player in 0.8-1.2 range (challenging but survivable)
+  // Calculate actual difficulty ratio achieved this wave
+  // Difficulty Ratio = (Wave Length × (Player DPS × Accuracy + Auto DPS)) / Enemy HP
+  const achievedPlayerDamage = effectiveMainDPS * ECONOMY.waveDuration;
+  const achievedAutoDamage = autoTurretsDPS * ECONOMY.waveDuration;
+  const achievedTotalDamage = achievedPlayerDamage + achievedAutoDamage;
+  const achievedDifficultyRatio = achievedTotalDamage / Math.max(1, waveEnemyHP);
+  lastPerformanceRatio = achievedDifficultyRatio;
+
+  // Determine difficulty multiplier based on achieved ratio vs target
+  // If achieved ratio > target, player is doing better than expected, scale up
   let baseDiffMultiplier = 1;
-  if (performanceRatio > 2.5) baseDiffMultiplier = 1.80;       // Crushing it
-  else if (performanceRatio > 2.0) baseDiffMultiplier = 1.60;  // Dominating
-  else if (performanceRatio > 1.5) baseDiffMultiplier = 1.40;  // Very strong
-  else if (performanceRatio > 1.2) baseDiffMultiplier = 1.18;  // Strong
-  else if (performanceRatio > 1.0) baseDiffMultiplier = 1.05;  // Slightly ahead
-  else if (performanceRatio > 0.8) baseDiffMultiplier = 0.98;  // Balanced
-  else if (performanceRatio > 0.6) baseDiffMultiplier = 0.85;  // Struggling
-  else if (performanceRatio > 0.4) baseDiffMultiplier = 0.72;  // Very struggling
+  if (achievedDifficultyRatio > difficultyRatioTarget * 1.4) baseDiffMultiplier = 1.80;       // Crushing it
+  else if (achievedDifficultyRatio > difficultyRatioTarget * 1.25) baseDiffMultiplier = 1.60;  // Dominating
+  else if (achievedDifficultyRatio > difficultyRatioTarget * 1.1) baseDiffMultiplier = 1.40;  // Very strong
+  else if (achievedDifficultyRatio > difficultyRatioTarget * 1.05) baseDiffMultiplier = 1.18;  // Strong
+  else if (achievedDifficultyRatio > difficultyRatioTarget * 0.95) baseDiffMultiplier = 1.02;  // Balanced
+  else if (achievedDifficultyRatio > difficultyRatioTarget * 0.85) baseDiffMultiplier = 0.98;  // Slightly weak
+  else if (achievedDifficultyRatio > difficultyRatioTarget * 0.7) baseDiffMultiplier = 0.85;  // Struggling
+  else if (achievedDifficultyRatio > difficultyRatioTarget * 0.5) baseDiffMultiplier = 0.72;  // Very struggling
   else baseDiffMultiplier = 0.60;                               // Overwhelmed
 
-  // Accuracy modifier: poor accuracy gets grace period (slower scaling), high accuracy scales faster
+  // Accuracy modifier: poor accuracy gets grace period, high accuracy scales faster
   const accuracyModifier = 0.5 + 1.5 * accuracy;  // Range: 0.5 (0% acc) to 2.0 (100% acc)
   const adjustedMultiplier = 1 + (baseDiffMultiplier - 1) * accuracyModifier;
   lastDiffMultiplier = adjustedMultiplier;
@@ -658,30 +677,43 @@ function upgradeCost(key) {
   return Math.round(u.base * Math.pow(1 + ECONOMY.escalationRate, game.lv[key]));
 }
 
-function calculateDPSPerCoin() {
-  // Calculate DPS/Coin efficiency: average cost / DPS benefit of affordable upgrades
-  const offensiveUpgrades = ['fireRate', 'damage', 'pierce'];
-  let totalCost = 0, totalDPS = 0, count = 0;
+function calculateDPSPerCoinBreakdown() {
+  // Calculate DPS/Coin: sum of all upgrade DPS gains / sum of all upgrade costs
+  let totalDPSGain = 0, totalCost = 0;
 
-  for (const key of offensiveUpgrades) {
-    if (game.lv[key] >= upgrades[key].max) continue; // Skip maxed upgrades
-    const cost = upgradeCost(key);
-    if (cost > game.coins * 2) continue; // Skip items too expensive to consider
+  // Evaluate each upgrade type (5 levels of each)
+  for (let lvl = 0; lvl < 5; lvl++) {
+    // Fire Rate: +25% to fireRate
+    const frCost = Math.round(upgrades.fireRate.base * Math.pow(1 + ECONOMY.escalationRate, lvl));
+    const frDPS = game.damage * game.fireRate * 0.25;
+    totalDPSGain += frDPS;
+    totalCost += frCost;
 
-    let dpsBenefit = 0;
-    if (key === 'fireRate') dpsBenefit = game.damage * game.fireRate * 0.25; // +25% fireRate
-    else if (key === 'damage') dpsBenefit = game.damage * game.fireRate * 0.35 / 0.35; // +35% damage
-    else if (key === 'pierce') dpsBenefit = game.damage * game.fireRate * 0.08; // Pierce benefit (simplified)
+    // Damage: +35% to damage
+    const dmgCost = Math.round(upgrades.damage.base * Math.pow(1 + ECONOMY.escalationRate, lvl));
+    const dmgDPS = game.damage * game.fireRate * 0.35;
+    totalDPSGain += dmgDPS;
+    totalCost += dmgCost;
 
-    if (dpsBenefit > 0) {
-      totalCost += cost;
-      totalDPS += dpsBenefit;
-      count++;
-    }
+    // Pierce: ~10% effective DPS gain
+    const pierceCost = Math.round(upgrades.pierce.base * Math.pow(1 + ECONOMY.escalationRate, lvl));
+    const pierceDPS = game.damage * game.fireRate * 0.10;
+    totalDPSGain += pierceDPS;
+    totalCost += pierceCost;
+
+    // Auto Power: +35% damage & +20% rate for auto turrets
+    const autoPowerCost = Math.round(upgrades.autoPower.base * Math.pow(1 + ECONOMY.escalationRate, lvl));
+    const autoPowerDPS = game.autoDamage * game.autoFireRate * 0.35 * 1.2 * Math.min(game.autoTurrets.length, 4);
+    totalDPSGain += autoPowerDPS;
+    totalCost += autoPowerCost;
   }
 
-  // Return DPS gained per coin (average of affordable upgrades)
-  return count > 0 ? totalDPS / totalCost : 0.1;
+  return [totalDPSGain, totalCost];
+}
+
+function calculateDPSPerCoin() {
+  const [totalDPSGain, totalCost] = calculateDPSPerCoinBreakdown();
+  return totalCost > 0 ? totalDPSGain / totalCost : 0.1;
 }
 
 function addAutoTurret() {
@@ -841,45 +873,51 @@ function updateHUD() {
   document.getElementById('dashWaveDmg').textContent = waveDamage.toFixed(0);
   document.getElementById('dashEnemyHP').textContent = waveEnemyHP.toFixed(0);
   document.getElementById('dashAcc').textContent = acc + '%';
-  document.getElementById('dashDPSCoin').textContent = dpsPerCoin.toFixed(3);
+
+  // DPS/Coin: show calculation
+  const [totalDPSGain, totalUpgradeCost] = calculateDPSPerCoinBreakdown();
+  const dpsPerCoinValue = totalUpgradeCost > 0 ? totalDPSGain / totalUpgradeCost : 0;
+  document.getElementById('dashDPSCoin').textContent = dpsPerCoinValue.toFixed(3) + ` (${totalDPSGain.toFixed(0)}/${totalUpgradeCost})`;
   document.getElementById('dashCoins').textContent = game.coins;
 }
 
 function showWaveSummary(accuracy, totalDps) {
   const mainDps = game.damage * game.fireRate;
   const autoDps = game.autoTurrets.length * game.autoDamage * game.autoFireRate;
-  const dpsPerCoin = calculateDPSPerCoin();
+  const [totalDPSGain, totalUpgradeCost] = calculateDPSPerCoinBreakdown();
+  const dpsPerCoin = totalUpgradeCost > 0 ? totalDPSGain / totalUpgradeCost : 0.1;
   const oldDiff = game.diff / lastDiffMultiplier;
 
-  // This Wave Breakdown
-  const waveDamage = mainDps * ECONOMY.waveDuration;
-  const effectiveDamage = waveDamage * accuracy;
-  const balance = effectiveDamage / Math.max(1, waveEnemyHP);
+  // This Wave Analysis - Difficulty Ratio equation
+  // Difficulty Ratio = (Wave Length × (Player DPS × Accuracy + Auto DPS)) / Enemy HP
+  const playerDamageThisWave = mainDps * accuracy * ECONOMY.waveDuration;
+  const autoDamageThisWave = autoDps * ECONOMY.waveDuration;
+  const totalDamageThisWave = playerDamageThisWave + autoDamageThisWave;
+  const difficultyRatioAchieved = totalDamageThisWave / Math.max(1, waveEnemyHP);
 
   // Economic State
   const coinsEarned = lastCoinsEarned;
   const totalCoins = game.coins;
 
-  // Next Wave Projection
+  // Next Wave Projection - using actual accuracy for next calculation
   const nextMainDps = mainDps + (dpsPerCoin * totalCoins);
-  const nextWaveDamage = nextMainDps * ECONOMY.waveDuration;
-  const nextEnemyHpFromMain = nextWaveDamage * accuracy;
-  const nextEnemyHpFromAuto = autoDps * ECONOMY.waveDuration;
-  const nextEnemyHpTotal = nextEnemyHpFromMain + nextEnemyHpFromAuto;
+  const nextPlayerDamage = nextMainDps * accuracy * ECONOMY.waveDuration;
+  const nextAutoDamage = autoDps * ECONOMY.waveDuration;
+  const nextTotalDamage = nextPlayerDamage + nextAutoDamage;
 
-  // Display This Wave
+  // Display This Wave - showing equation components
   document.getElementById('sumDPS').textContent = mainDps.toFixed(1);
   document.getElementById('sumWaveLen').textContent = ECONOMY.waveDuration;
-  document.getElementById('sumWaveDmg').textContent = waveDamage.toFixed(0);
+  document.getElementById('sumWaveDmg').textContent = (mainDps * ECONOMY.waveDuration).toFixed(0);
   document.getElementById('sumEnemyHP').textContent = waveEnemyHP.toFixed(0);
   document.getElementById('sumAcc').textContent = Math.round(accuracy * 100) + '%';
-  document.getElementById('sumEffective').textContent = effectiveDamage.toFixed(0);
-  document.getElementById('sumBalance').textContent = balance.toFixed(2) + 'x';
+  document.getElementById('sumEffective').textContent = totalDamageThisWave.toFixed(0);
+  document.getElementById('sumBalance').textContent = difficultyRatioAchieved.toFixed(2) + 'x (target: ' + difficultyRatioTarget.toFixed(2) + 'x)';
 
-  // Display Economic State
+  // Display Economic State - DPS/Coin breakdown
   document.getElementById('sumCoinsEarn').textContent = coinsEarned;
   document.getElementById('sumCoinTotal').textContent = totalCoins;
-  document.getElementById('sumDPSCoin').textContent = dpsPerCoin.toFixed(3);
+  document.getElementById('sumDPSCoin').textContent = dpsPerCoin.toFixed(3) + ` = ${totalDPSGain.toFixed(0)} DPS / ${totalUpgradeCost} coins`;
 
   // Display Next Wave Projection
   document.getElementById('sumCurrentDPS').textContent = mainDps.toFixed(1);
@@ -888,7 +926,7 @@ function showWaveSummary(accuracy, totalDps) {
   document.getElementById('sumNewDPS').textContent = nextMainDps.toFixed(1);
   document.getElementById('sumNewDPS2').textContent = nextMainDps.toFixed(1);
   document.getElementById('sumAccProj').textContent = Math.round(accuracy * 100) + '%';
-  document.getElementById('sumNewEnemyHP').textContent = nextEnemyHpTotal.toFixed(0);
+  document.getElementById('sumNewEnemyHP').textContent = nextTotalDamage.toFixed(0) + ' (target: ' + (nextTotalDamage / difficultyRatioTarget).toFixed(0) + ')';
 
   // Difficulty change
   document.getElementById('sumDiffMult').textContent = oldDiff.toFixed(2) + 'x';
@@ -912,6 +950,7 @@ function resetGame() {
   mainBulletsFired = 0; mainBulletsHit = 0;
   lastDiffMultiplier = 1; lastPerformanceRatio = 1; lastCoinsEarned = 0;
   expectedNextWaveHP = 0; expectedNextDPS = 0;
+  lastWaveAccuracy = 0.4; difficultyRatioTarget = 1.2;
 }
 function startGame() { resetGame(); hideAll(); startWave(); }
 
