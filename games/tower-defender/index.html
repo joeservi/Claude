@@ -50,7 +50,7 @@
 <div class="overlay" id="startScreen">
   <div class="panel">
     <h1>🏰 Tower Defender</h1>
-    <div class="sub">Use the <b>joystick</b> at the bottom to aim & fire the turret.<br>Survive the waves. Spend coins to upgrade between rounds.</div>
+    <div class="sub">Use the <b>horizontal joystick</b> at the bottom to aim & fire the turret.<br>Survive the waves. Spend coins to upgrade between rounds.</div>
     <button class="btn" id="startBtn">START</button>
   </div>
 </div>
@@ -94,7 +94,6 @@
     canvas.width = W * DPR; canvas.height = H * DPR;
     canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    stick.restX = W / 2; stick.restY = H - 50;
   }
   window.addEventListener('resize', resize);
 
@@ -103,8 +102,8 @@
   let state = State.START;
 
   const game = {
-    cx: 0, cy: 0,                    // tower center (bottom of screen)
-    towerRadius: 60,
+    wallY: 0,                       // wall position (near bottom)
+    turretX: 0, turretY: 0,        // main turret (below wall, centered)
     coins: 0,
     wave: 0,
     bestWave: 0,
@@ -113,7 +112,7 @@
     fireRate: 2.0,
     damage: 8,
     bulletSpeed: 540,
-    autoTurrets: [],                 // {angle, level, cooldown}
+    autoTurrets: [],                // {x, y, cooldown}
     autoDamage: 5,
     autoFireRate: 1.0,
     lv: { fireRate:0, damage:0, autoTurret:0, autoPower:0, maxHp:0, regen:0 },
@@ -129,14 +128,16 @@
   let waveStartHp = 100;
   let waveClosestGap = Infinity;
 
-  // ---- Joystick (mirrored) ----
+  // ---- Horizontal Joystick ----
   const stick = {
     active: false, id: null,
-    baseX: 0, baseY: 0, knobX: 0, knobY: 0,
-    restX: 0, restY: 0, baseR: 70, knobR: 35, deadzone: 0.22,
-    angle: 0, mag: 0,
+    baseX: 0, y: 0,
+    knobX: 0,
+    restX: 0, restY: 0,
+    width: 200, height: 50, deadzone: 0.22,
+    mag: 0,
   };
-  let aiming = false, aimAngle = -Math.PI/2;
+  let aiming = false, aimAngle = Math.PI / 2;  // start pointing up
   let playerCooldown = 0;
 
   // ---- Upgrades ----
@@ -162,30 +163,32 @@
   }
 
   function addAutoTurret() {
-    game.autoTurrets.push({ angle: 0, cooldown: 0 });
+    game.autoTurrets.push({ x: 0, y: 0, cooldown: 0 });
     layoutAutoTurrets();
   }
 
   function layoutAutoTurrets() {
-    // 4 turrets: 2 left, 2 right
-    // upper-left, lower-left, upper-right, lower-right
-    const positions = [
-      { angle: Math.PI + 0.4, offsetR: 48 },   // upper-left
-      { angle: Math.PI - 0.4, offsetR: 48 },   // lower-left
-      { angle: 0 + 0.4, offsetR: 48 },         // upper-right
-      { angle: 0 - 0.4, offsetR: 48 },         // lower-right
-    ];
+    // 2 left, 2 right on the castle wall
+    const count = game.autoTurrets.length;
+    const spacing = 80;
     game.autoTurrets.forEach((t, i) => {
-      if (i < positions.length) {
-        t.angle = positions[i].angle;
-        t.offsetR = positions[i].offsetR;
+      if (i < 2) {
+        // left side
+        t.x = game.wallY - 80 - i * spacing;
+        t.y = game.wallY - 20;
+      } else {
+        // right side
+        t.x = W - (game.wallY - 80) + (i - 2) * spacing;
+        t.y = game.wallY - 20;
       }
     });
   }
 
   // ---- Flow ----
   function resetGame() {
-    game.cx = W/2; game.cy = H - 120;
+    game.wallY = H - 140;
+    game.turretX = W / 2;
+    game.turretY = game.wallY + 50;
     game.coins = 0; game.wave = 0;
     game.maxHp = 100; game.hp = 100; game.hpRegen = 0;
     game.fireRate = 2.0; game.damage = 8; game.bulletSpeed = 540;
@@ -198,7 +201,9 @@
   function startGame() { resetGame(); hideAll(); startWave(); }
 
   function startWave() {
-    game.cx = W/2; game.cy = H - 120;
+    game.wallY = H - 140;
+    game.turretX = W / 2;
+    game.turretY = game.wallY + 50;
     game.wave++;
     game.bestWave = Math.max(game.bestWave, game.wave);
     toSpawn = Math.round(5 + game.wave * 1.5 + (game.diff - 1) * 4);
@@ -271,23 +276,21 @@
   // ---- Firing ----
   function fireFromPlayer() {
     const c = Math.cos(aimAngle), s = Math.sin(aimAngle);
-    const mx = game.cx + c*28, my = game.cy + s*28;
+    const mx = game.turretX + c*24, my = game.turretY + s*24;
     bullets.push({ x:mx, y:my, vx:c*game.bulletSpeed, vy:s*game.bulletSpeed, dmg:game.damage, r:5, color:'#ffe27a', life:2 });
     spawnMuzzle(mx, my, c, s);
   }
 
   function fireAutoTurret(t) {
-    const tx = game.cx + Math.cos(t.angle) * (t.offsetR || 48);
-    const ty = game.cy + Math.sin(t.angle) * (t.offsetR || 48);
     let best = null, bestD = Infinity;
     for (const e of enemies) {
-      const d = (e.x-tx)**2 + (e.y-ty)**2;
+      const d = (e.x-t.x)**2 + (e.y-t.y)**2;
       if (d < bestD) { bestD = d; best = e; }
     }
     if (!best) return false;
-    const dx = best.x - tx, dy = best.y - ty;
+    const dx = best.x - t.x, dy = best.y - t.y;
     const len = Math.hypot(dx, dy) || 1;
-    bullets.push({ x:tx, y:ty, vx:dx/len*460, vy:dy/len*460, dmg:game.autoDamage, r:4, color:'#7fe0a0', life:2 });
+    bullets.push({ x:t.x, y:t.y, vx:dx/len*460, vy:dy/len*460, dmg:game.autoDamage, r:4, color:'#7fe0a0', life:2 });
     return true;
   }
 
@@ -346,11 +349,11 @@
 
     for (let j=enemies.length-1;j>=0;j--){
       const e = enemies[j];
-      const dx = game.cx - e.x, dy = game.cy - e.y;
+      const dx = game.turretX - e.x, dy = game.turretY - e.y;
       const dist = Math.hypot(dx, dy) || 1;
-      const gap = dist - game.towerRadius - e.r;
+      const gap = dist - 30 - e.r;  // 30 = turret radius
       if (gap < waveClosestGap) waveClosestGap = gap;
-      if (dist > game.towerRadius + e.r - 4) {
+      if (dist > 30 + e.r - 4) {
         e.x += dx/dist * e.speed * dt; e.y += dy/dist * e.speed * dt;
       } else {
         damageTower(5 + game.wave * 0.5 + (e.type==='tank'?8:0));
@@ -392,10 +395,8 @@
 
     if (state === State.START) return;
 
-    const {cx, cy, towerRadius} = game;
-
-    // draw tower structure
-    drawTower(cx, cy);
+    // draw tower structure (wall + main turret + auto turrets)
+    drawTower();
 
     // enemies
     for (const e of enemies){
@@ -438,7 +439,7 @@
     }
     ctx.globalAlpha = 1; ctx.textAlign = 'start';
 
-    // joystick
+    // horizontal joystick
     if (state === State.PLAYING) drawStick();
 
     // HUD
@@ -456,87 +457,90 @@
     ctx.textAlign = 'start';
   }
 
-  function drawTower(cx, cy) {
+  function drawTower() {
     const hpFrac = game.hp/game.maxHp;
 
-    // castle wall (above main turret)
+    // castle wall (horizontal bar across screen)
     ctx.fillStyle = '#3d4d66';
-    ctx.fillRect(cx - 56, cy - 76, 112, 36);
-    // wall details (crenellations)
+    ctx.fillRect(0, game.wallY, W, 40);
+    // wall crenellations
     ctx.fillStyle = '#2a3a52';
-    for (let i=0; i<6; i++) {
-      const wx = cx - 48 + i*19;
-      ctx.fillRect(wx, cy - 84, 8, 8);
+    for (let i=0; i<Math.floor(W/30); i++) {
+      const wx = i*30;
+      ctx.fillRect(wx, game.wallY - 12, 15, 12);
     }
     // wall outline
     ctx.lineWidth = 2; ctx.strokeStyle = '#6b8ab8';
-    ctx.strokeRect(cx - 56, cy - 76, 112, 36);
+    ctx.strokeRect(0, game.wallY, W, 40);
 
-    // tower circle (defense zone)
-    ctx.beginPath(); ctx.arc(cx, cy, game.towerRadius, 0, Math.PI*2);
-    ctx.fillStyle = 'rgba(50,70,120,0.2)'; ctx.fill();
-    ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(107,138,184,0.4)'; ctx.stroke();
+    // HP bar (horizontal, below wall)
+    const barH = 6;
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fillRect(0, game.wallY + 42, W, barH);
+    ctx.fillStyle = hpFrac>0.5?'#5ad67a':(hpFrac>0.25?'#ffd75e':'#ef4444');
+    ctx.fillRect(0, game.wallY + 42, W * hpFrac, barH);
+    ctx.lineWidth = 1; ctx.strokeStyle = '#6b8ab8';
+    ctx.strokeRect(0, game.wallY + 42, W, barH);
 
-    // HP ring
-    ctx.beginPath();
-    ctx.arc(cx, cy, game.towerRadius + 8, -Math.PI/2, -Math.PI/2 + Math.PI*2*hpFrac);
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = hpFrac>0.5?'#5ad67a':(hpFrac>0.25?'#ffd75e':'#ef4444');
-    ctx.stroke();
+    // main turret (centered below wall)
+    const tw = 40, th = 50;
+    ctx.fillStyle = '#e8a13e';
+    ctx.fillRect(game.turretX - tw/2, game.turretY - th, tw, th);
+    ctx.lineWidth = 2; ctx.strokeStyle = '#fff2c4';
+    ctx.strokeRect(game.turretX - tw/2, game.turretY - th, tw, th);
 
-    // auto turrets (2 left, 2 right)
+    // main turret barrel
+    ctx.save(); ctx.translate(game.turretX, game.turretY - th/2);
+    ctx.rotate(aimAngle);
+    ctx.fillStyle = aiming ? '#ffe27a' : '#ffd75e';
+    ctx.fillRect(0, -4, 32, 8);
+    ctx.restore();
+
+    // auto turrets on wall
     for (const t of game.autoTurrets){
-      const tx = cx + Math.cos(t.angle) * (t.offsetR || 48);
-      const ty = cy + Math.sin(t.angle) * (t.offsetR || 48);
+      ctx.fillStyle = '#2f7f55';
+      ctx.fillRect(t.x - 12, t.y - 12, 24, 24);
+      ctx.lineWidth = 2; ctx.strokeStyle = '#7fe0a0';
+      ctx.strokeRect(t.x - 12, t.y - 12, 24, 24);
 
-      ctx.beginPath(); ctx.arc(tx, ty, 12, 0, Math.PI*2);
-      ctx.fillStyle = '#2f7f55'; ctx.fill();
-      ctx.lineWidth = 2; ctx.strokeStyle = '#7fe0a0'; ctx.stroke();
-
-      // turret barrel
-      const barrelAngle = Math.atan2(cy - ty, cx - tx);
-      ctx.save(); ctx.translate(tx, ty); ctx.rotate(barrelAngle);
+      // turret barrel (point toward enemies or center)
+      let angle = 0;
+      let best = null, bestD = Infinity;
+      for (const e of enemies) {
+        const d = (e.x-t.x)**2 + (e.y-t.y)**2;
+        if (d < bestD) { bestD = d; best = e; }
+      }
+      if (best) angle = Math.atan2(best.y - t.y, best.x - t.x);
+      ctx.save(); ctx.translate(t.x, t.y);
+      ctx.rotate(angle);
       ctx.fillStyle = '#5ad6a0';
       ctx.fillRect(2, -3, 14, 6);
       ctx.restore();
     }
-
-    // main turret barrel + base
-    ctx.beginPath(); ctx.arc(cx, cy, 18, 0, Math.PI*2);
-    ctx.fillStyle = '#e8a13e'; ctx.fill();
-    ctx.lineWidth = 3; ctx.strokeStyle = '#fff2c4'; ctx.stroke();
-
-    // barrel
-    ctx.save(); ctx.translate(cx, cy); ctx.rotate(aimAngle);
-    ctx.fillStyle = aiming ? '#ffe27a' : '#ffd75e';
-    ctx.fillRect(0, -6, 32, 12);
-    // barrel tip glow (when firing)
-    if (playerCooldown < 0.08) {
-      ctx.globalAlpha = 1 - (playerCooldown / 0.08);
-      ctx.fillStyle = '#ffe27a';
-      ctx.fillRect(28, -4, 8, 8);
-      ctx.globalAlpha = 1;
-    }
-    ctx.restore();
   }
 
   function drawStick() {
-    const bx = stick.active ? stick.baseX : stick.restX;
-    const by = stick.active ? stick.baseY : stick.restY;
-    const kx = stick.active ? stick.knobX : stick.restX;
-    const ky = stick.active ? stick.knobY : stick.restY;
+    stick.restX = W / 2 - stick.width / 2;
+    stick.restY = H - 60;
+
+    const bx = stick.restX;
+    const by = stick.restY;
+    const kx = stick.active ? stick.knobX : stick.restX + stick.width / 2;
+    const ky = stick.restY;
 
     // base
     ctx.globalAlpha = stick.active ? 0.55 : 0.3;
-    ctx.beginPath(); ctx.arc(bx, by, stick.baseR, 0, Math.PI*2);
-    ctx.fillStyle = '#1d2740'; ctx.fill();
-    ctx.lineWidth = 2.5; ctx.strokeStyle = '#3b5a9c'; ctx.stroke();
+    ctx.fillStyle = '#1d2740';
+    ctx.fillRect(bx, by, stick.width, stick.height);
+    ctx.lineWidth = 2.5; ctx.strokeStyle = '#3b5a9c';
+    ctx.strokeRect(bx, by, stick.width, stick.height);
 
-    // knob
+    // knob (horizontal slider)
     ctx.globalAlpha = stick.active ? 1 : 0.6;
-    ctx.beginPath(); ctx.arc(kx, ky, stick.knobR, 0, Math.PI*2);
-    ctx.fillStyle = '#3b82f6'; ctx.fill();
-    ctx.lineWidth = 2.5; ctx.strokeStyle = '#60a5fa'; ctx.stroke();
+    ctx.fillStyle = '#3b82f6';
+    ctx.fillRect(kx - 20, ky + stick.height/2 - 15, 40, 30);
+    ctx.lineWidth = 2.5; ctx.strokeStyle = '#60a5fa';
+    ctx.strokeRect(kx - 20, ky + stick.height/2 - 15, 40, 30);
     ctx.globalAlpha = 1;
   }
 
@@ -549,26 +553,27 @@
     requestAnimationFrame(loop);
   }
 
-  // ---- Input (mirrored joystick) ----
+  // ---- Input (horizontal joystick) ----
   function getTouchById(e, id) {
     for (const t of e.changedTouches) if (t.identifier === id) return t;
     return null;
   }
   function startStick(x, y, id) {
     stick.active = true; stick.id = id;
-    stick.baseX = x; stick.baseY = y; stick.knobX = x; stick.knobY = y;
-    updateStick(x, y);
+    stick.baseX = stick.restX;
+    updateStick(x);
   }
-  function updateStick(x, y) {
-    let dx = x - stick.baseX, dy = y - stick.baseY;
-    const dist = Math.hypot(dx, dy);
-    if (dist > stick.baseR) { dx = dx/dist*stick.baseR; dy = dy/dist*stick.baseR; }
-    stick.knobX = stick.baseX + dx; stick.knobY = stick.baseY + dy;
-    stick.mag = Math.min(1, dist / stick.baseR);
+  function updateStick(x) {
+    stick.restX = W / 2 - stick.width / 2;
+    let dx = x - (stick.restX + stick.width / 2);
+    const maxTravel = stick.width / 2;
+    if (Math.abs(dx) > maxTravel) dx = Math.sign(dx) * maxTravel;
+    stick.knobX = stick.restX + stick.width / 2 + dx;
+    stick.mag = Math.min(1, Math.abs(dx) / maxTravel);
     if (stick.mag > stick.deadzone) {
-      // MIRRORED: invert X (left on stick = right angle, right on stick = left angle)
-      stick.angle = Math.atan2(dy, -dx);
-      aimAngle = stick.angle; aiming = true;
+      // MIRRORED: left (negative dx) = right angle, right (positive dx) = left angle
+      aimAngle = Math.PI / 2 - (dx / maxTravel) * Math.PI * 0.5;
+      aiming = true;
     } else { aiming = false; }
   }
   function endStick() {
@@ -588,7 +593,7 @@
     if (!stick.active) return;
     e.preventDefault();
     const t = getTouchById(e, stick.id);
-    if (t) updateStick(t.clientX, t.clientY);
+    if (t) updateStick(t.clientX);
   }
   function onTouchEnd(e) {
     if (!stick.active) return;
@@ -601,7 +606,7 @@
 
   // mouse fallback
   canvas.addEventListener('mousedown', e => { if (state===State.PLAYING) startStick(e.clientX, e.clientY, 'mouse'); });
-  canvas.addEventListener('mousemove', e => { if (stick.active) updateStick(e.clientX, e.clientY); });
+  canvas.addEventListener('mousemove', e => { if (stick.active) updateStick(e.clientX); });
   window.addEventListener('mouseup', () => { if (stick.active) endStick(); });
 
   // ---- UI ----
@@ -617,11 +622,10 @@
 
   function renderUpgrades() {
     const offense = ['fireRate','damage'];
-    // only show autoTurret/autoPower if they have at least one auto turret
     if (game.autoTurrets.length > 0) {
       offense.push('autoTurret','autoPower');
     } else {
-      offense.push('autoTurret');  // always show BUILD option
+      offense.push('autoTurret');
     }
     const defense = ['maxHp','regen','repair'];
     const offEl = document.getElementById('offenseUpgrades');
@@ -637,7 +641,6 @@
       const cantAfford = game.coins < cost;
       const repairFull = isRepair && game.hp >= game.maxHp;
 
-      // hide autoPower if no auto turrets yet
       if (key === 'autoPower' && game.autoTurrets.length === 0) return;
 
       const btn = document.createElement('button');
