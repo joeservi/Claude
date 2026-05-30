@@ -50,7 +50,7 @@
 <div class="overlay" id="startScreen">
   <div class="panel">
     <h1>🏰 Tower Defender</h1>
-    <div class="sub">Hold your finger to aim & fire the turret.<br>Survive the waves. Spend coins to upgrade.</div>
+    <div class="sub">Use the <b>joystick</b> at the bottom to aim & fire the turret.<br>Survive the waves. Spend coins to upgrade between rounds.</div>
     <button class="btn" id="startBtn">START</button>
   </div>
 </div>
@@ -94,82 +94,81 @@
     canvas.width = W * DPR; canvas.height = H * DPR;
     canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    stick.restX = W / 2; stick.restY = H - 110;
   }
   window.addEventListener('resize', resize);
-  resize();
 
   // ---- Game State ----
   const State = { START: 0, PLAYING: 1, SHOP: 2, GAMEOVER: 3 };
   let state = State.START;
 
   const game = {
-    cx: 0, cy: 0,         // tower center
-    towerRadius: 70,
+    cx: 0, cy: 0,
+    towerRadius: 64,
     coins: 0,
     wave: 0,
     bestWave: 0,
-    // tower stats
     maxHp: 100, hp: 100,
-    hpRegen: 0,           // hp per second
-    // player turret stats
-    fireRate: 2.0,        // shots per second
+    hpRegen: 0,
+    fireRate: 2.0,
     damage: 8,
     bulletSpeed: 520,
-    range: 9999,
-    // auto turrets
-    autoTurrets: [],      // {angle, level, cooldown}
+    autoTurrets: [],
     autoDamage: 5,
     autoFireRate: 1.0,
-    // upgrade levels
     lv: { fireRate:0, damage:0, autoTurret:0, autoPower:0, maxHp:0, regen:0 },
-    // difficulty adaption
-    diff: 1.0,
+    diff: 0.9,
   };
 
-  let bullets = [];   // {x,y,vx,vy,dmg,r,enemy?}
-  let enemies = [];   // {x,y,hp,maxHp,speed,r,reward,type,slow}
-  let particles = []; // {x,y,vx,vy,life,maxLife,color,size}
-  let floaters = [];  // {x,y,text,life,color}
+  let bullets = [];
+  let enemies = [];
+  let particles = [];
+  let floaters = [];
 
-  // wave control
-  let toSpawn = 0, spawnTimer = 0, spawnInterval = 0.8;
-  let waveStartHp = 100, waveStartTime = 0;
+  let toSpawn = 0, spawnTimer = 0, spawnInterval = 0.85;
+  let waveStartHp = 100;
+  let waveClosestGap = Infinity; // how close (px past tower edge) any enemy got this wave
 
-  // input
-  let aiming = false, aimX = 0, aimY = 0;
+  // ---- Joystick ----
+  const stick = {
+    active: false, id: null,
+    baseX: 0, baseY: 0, knobX: 0, knobY: 0,
+    restX: 0, restY: 0, baseR: 60, knobR: 30, deadzone: 0.22,
+    angle: 0, mag: 0,
+  };
+  let aiming = false, aimAngle = -Math.PI/2;
   let playerCooldown = 0;
 
-  // ---- Upgrade Definitions ----
+  // ---- Upgrades ----
   const upgrades = {
-    fireRate:   { name:'Fire Rate',   desc:'+25% turret fire rate', base:25, growth:1.55, max:20,
+    fireRate:   { name:'Fire Rate',    desc:'+25% turret fire rate', base:22, growth:1.5, max:20,
                   apply:()=>{ game.fireRate *= 1.25; } },
-    damage:     { name:'Turret Damage',desc:'+40% turret damage', base:30, growth:1.55, max:30,
-                  apply:()=>{ game.damage *= 1.40; } },
-    autoTurret: { name:'Build Auto-Turret',desc:'Adds an auto-turret', base:60, growth:1.8, max:8,
+    damage:     { name:'Turret Damage',desc:'+35% turret damage', base:26, growth:1.5, max:30,
+                  apply:()=>{ game.damage *= 1.35; } },
+    autoTurret: { name:'Build Auto-Turret',desc:'Adds an auto-turret', base:55, growth:1.75, max:8,
                   apply:()=>{ addAutoTurret(); } },
-    autoPower:  { name:'Auto-Turret Power',desc:'+35% auto dmg & rate', base:45, growth:1.6, max:25,
+    autoPower:  { name:'Auto-Turret Power',desc:'+35% auto dmg & rate', base:40, growth:1.55, max:25,
                   apply:()=>{ game.autoDamage*=1.35; game.autoFireRate*=1.20; } },
-    maxHp:      { name:'Max HP',      desc:'+30 max HP (& heal it)', base:35, growth:1.5, max:40,
-                  apply:()=>{ game.maxHp += 30; game.hp += 30; } },
-    regen:      { name:'HP Regen',    desc:'+1.5 HP/sec', base:50, growth:1.6, max:20,
-                  apply:()=>{ game.hpRegen += 1.5; } },
+    maxHp:      { name:'Max HP',       desc:'+30 max HP (does NOT heal)', base:30, growth:1.45, max:40,
+                  apply:()=>{ game.maxHp += 30; } },
+    regen:      { name:'HP Regen',     desc:'+1.2 HP/sec', base:45, growth:1.55, max:20,
+                  apply:()=>{ game.hpRegen += 1.2; } },
+    // repair is special: repeatable, heals, cost scales with wave, disabled at full HP
+    repair:     { name:'Repair Tower', desc:'Restore 40 HP', repair:true, healAmount:40 },
   };
   function upgradeCost(key) {
     const u = upgrades[key];
+    if (u.repair) return Math.round(18 * (1 + game.wave * 0.22));
     return Math.round(u.base * Math.pow(u.growth, game.lv[key]));
   }
 
   function addAutoTurret() {
-    const n = game.autoTurrets.length;
-    // distribute around the tower ring
-    const angle = (n * (Math.PI * 2 / 6)) + Math.PI / 6;
-    game.autoTurrets.push({ angle, cooldown: 0 });
-    // reposition all evenly
+    game.autoTurrets.push({ angle: 0, cooldown: 0 });
     const count = game.autoTurrets.length;
     game.autoTurrets.forEach((t, i) => { t.angle = (i / count) * Math.PI * 2 - Math.PI/2; });
   }
 
-  // ---- Game Flow ----
+  // ---- Flow ----
   function resetGame() {
     game.cx = W/2; game.cy = H/2;
     game.coins = 0; game.wave = 0;
@@ -177,59 +176,54 @@
     game.fireRate = 2.0; game.damage = 8; game.bulletSpeed = 520;
     game.autoTurrets = []; game.autoDamage = 5; game.autoFireRate = 1.0;
     game.lv = { fireRate:0, damage:0, autoTurret:0, autoPower:0, maxHp:0, regen:0 };
-    game.diff = 1.0;
+    game.diff = 0.9;
     bullets = []; enemies = []; particles = []; floaters = [];
   }
 
-  function startGame() {
-    resetGame();
-    hideAll();
-    startWave();
-  }
+  function startGame() { resetGame(); hideAll(); startWave(); }
 
   function startWave() {
     game.cx = W/2; game.cy = H/2;
     game.wave++;
     game.bestWave = Math.max(game.bestWave, game.wave);
-    // wave size & difficulty scale
-    const base = 6 + game.wave * 2;
-    toSpawn = Math.round(base * game.diff);
+    // gentle, predictable scaling early
+    toSpawn = Math.round(5 + game.wave * 1.5 + (game.diff - 1) * 4);
+    toSpawn = Math.max(4, toSpawn);
     spawnTimer = 0;
-    spawnInterval = Math.max(0.25, 0.85 - game.wave * 0.02);
+    spawnInterval = Math.max(0.3, 0.9 - game.wave * 0.02);
     waveStartHp = game.hp;
-    waveStartTime = performance.now();
+    waveClosestGap = Infinity;
     state = State.PLAYING;
     hideAll();
   }
 
   function endWave() {
-    // ---- Adaptive difficulty ----
-    // Evaluate how the player did this wave.
-    const hpFrac = game.hp / game.maxHp;
+    // ---- Adaptive difficulty (proximity + HP based) ----
+    // How close did the nearest enemy get to breaching? (gap in px past tower edge)
+    const gap = Math.max(0, waveClosestGap === Infinity ? 400 : waveClosestGap);
+    const proximityDanger = 1 - Math.min(1, gap / 220);   // 1 = enemies nearly breached
     const hpLostFrac = Math.max(0, (waveStartHp - game.hp)) / game.maxHp;
-    const elapsed = (performance.now() - waveStartTime) / 1000;
-    // Player crushed it (lost little HP, fast) -> ramp up. Struggled -> ease off.
-    if (hpLostFrac < 0.08 && hpFrac > 0.7) game.diff *= 1.18;       // dominated
-    else if (hpLostFrac < 0.20) game.diff *= 1.10;                  // comfortable
-    else if (hpLostFrac < 0.45) game.diff *= 1.03;                  // tense (ideal)
-    else game.diff *= 0.94;                                          // overwhelmed, ease
+    const threat = Math.max(proximityDanger, hpLostFrac * 1.2);
+
+    if (threat < 0.20) game.diff *= 1.15;        // dominated -> ramp up
+    else if (threat < 0.40) game.diff *= 1.08;   // comfortable
+    else if (threat < 0.65) game.diff *= 1.02;   // tense (ideal)
+    else game.diff *= 0.95;                       // nearly breached -> ease off
     game.diff = Math.max(0.8, Math.min(game.diff, 6));
 
-    game.coins += 10 + game.wave * 3; // wave clear bonus
+    game.coins += 8 + game.wave * 3;
     state = State.SHOP;
     showShop();
   }
 
   function damageTower(amount) {
     game.hp -= amount;
-    if (game.hp <= 0) {
-      game.hp = 0;
-      gameOver();
-    }
+    if (game.hp <= 0) { game.hp = 0; gameOver(); }
   }
 
   function gameOver() {
     state = State.GAMEOVER;
+    aiming = false; stick.active = false; stick.id = null;
     document.getElementById('bestWave').textContent = game.bestWave;
     document.getElementById('gameOverSub').textContent =
       `You reached Wave ${game.wave}. The horde grew relentless.`;
@@ -238,7 +232,6 @@
 
   // ---- Enemy Spawning ----
   function spawnEnemy() {
-    // pick a random edge point
     const edge = Math.floor(Math.random() * 4);
     let x, y;
     if (edge === 0) { x = Math.random()*W; y = -30; }
@@ -246,41 +239,34 @@
     else if (edge === 2) { x = Math.random()*W; y = H+30; }
     else { x = -30; y = Math.random()*H; }
 
-    const w = game.wave;
-    // enemy variety scaled by difficulty
+    const w = game.wave, d = game.diff;
     let type = 'grunt';
     const roll = Math.random();
-    if (w >= 3 && roll < 0.18) type = 'tank';
-    else if (w >= 2 && roll < 0.45) type = 'fast';
+    if (w >= 5 && roll < 0.15) type = 'tank';
+    else if (w >= 3 && roll < 0.40) type = 'fast';
 
     let hp, speed, r, reward, color;
-    const d = game.diff;
     if (type === 'tank') {
-      hp = (40 + w*12) * d; speed = 28 + w*1.2; r = 20; reward = 8 + Math.floor(w*0.8); color = '#c0563f';
+      hp = (34 + w*9) * d; speed = 26 + w*1.0; r = 20; reward = 7 + Math.floor(w*0.7); color = '#c0563f';
     } else if (type === 'fast') {
-      hp = (10 + w*4) * d; speed = 70 + w*3; r = 10; reward = 4 + Math.floor(w*0.4); color = '#5ad6e0';
+      hp = (8 + w*3) * d; speed = 66 + w*2.5; r = 10; reward = 4 + Math.floor(w*0.4); color = '#5ad6e0';
     } else {
-      hp = (18 + w*6) * d; speed = 42 + w*2; r = 14; reward = 3 + Math.floor(w*0.4); color = '#9b8cff';
+      hp = (12 + w*4) * d; speed = 40 + w*1.6; r = 14; reward = 3 + Math.floor(w*0.4); color = '#9b8cff';
     }
     enemies.push({ x, y, hp, maxHp:hp, speed, r, reward, type, color, hitFlash:0 });
   }
 
   // ---- Firing ----
   function fireFromPlayer() {
-    if (!aiming) return;
-    const dx = aimX - game.cx, dy = aimY - game.cy;
-    const len = Math.hypot(dx, dy) || 1;
-    const vx = dx/len * game.bulletSpeed, vy = dy/len * game.bulletSpeed;
-    // muzzle at edge of inner turret
-    const mx = game.cx + dx/len * 26, my = game.cy + dy/len * 26;
-    bullets.push({ x:mx, y:my, vx, vy, dmg:game.damage, r:5, color:'#ffe27a', life:2 });
-    spawnMuzzle(mx, my, dx/len, dy/len);
+    const c = Math.cos(aimAngle), s = Math.sin(aimAngle);
+    const mx = game.cx + c*26, my = game.cy + s*26;
+    bullets.push({ x:mx, y:my, vx:c*game.bulletSpeed, vy:s*game.bulletSpeed, dmg:game.damage, r:5, color:'#ffe27a', life:2 });
+    spawnMuzzle(mx, my, c, s);
   }
 
   function fireAutoTurret(t) {
     const tx = game.cx + Math.cos(t.angle) * (game.towerRadius - 16);
     const ty = game.cy + Math.sin(t.angle) * (game.towerRadius - 16);
-    // target nearest enemy
     let best = null, bestD = Infinity;
     for (const e of enemies) {
       const d = (e.x-tx)**2 + (e.y-ty)**2;
@@ -295,23 +281,16 @@
 
   // ---- Particles ----
   function spawnHit(x, y, color) {
-    for (let i=0;i<6;i++){
-      const a = Math.random()*Math.PI*2, s = 40+Math.random()*120;
-      particles.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:0.4, maxLife:0.4, color, size:2+Math.random()*2 });
-    }
+    for (let i=0;i<6;i++){ const a=Math.random()*Math.PI*2, s=40+Math.random()*120;
+      particles.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:0.4, maxLife:0.4, color, size:2+Math.random()*2 }); }
   }
   function spawnDeath(x, y, color) {
-    for (let i=0;i<14;i++){
-      const a = Math.random()*Math.PI*2, s = 60+Math.random()*180;
-      particles.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:0.6, maxLife:0.6, color, size:2+Math.random()*3 });
-    }
+    for (let i=0;i<14;i++){ const a=Math.random()*Math.PI*2, s=60+Math.random()*180;
+      particles.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:0.6, maxLife:0.6, color, size:2+Math.random()*3 }); }
   }
   function spawnMuzzle(x, y, dx, dy) {
-    for (let i=0;i<3;i++){
-      const spread = (Math.random()-0.5)*0.6;
-      const a = Math.atan2(dy,dx)+spread, s=80+Math.random()*120;
-      particles.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:0.18, maxLife:0.18, color:'#ffd75e', size:2 });
-    }
+    for (let i=0;i<3;i++){ const spread=(Math.random()-0.5)*0.6, a=Math.atan2(dy,dx)+spread, s=80+Math.random()*120;
+      particles.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:0.18, maxLife:0.18, color:'#ffd75e', size:2 }); }
   }
   function addFloater(x,y,text,color){ floaters.push({x,y,text,life:0.8,color}); }
 
@@ -319,99 +298,74 @@
   function update(dt) {
     if (state !== State.PLAYING) return;
 
-    // regen
-    if (game.hpRegen > 0 && game.hp < game.maxHp) {
+    if (game.hpRegen > 0 && game.hp < game.maxHp)
       game.hp = Math.min(game.maxHp, game.hp + game.hpRegen * dt);
-    }
 
-    // spawn enemies
     if (toSpawn > 0) {
       spawnTimer -= dt;
       if (spawnTimer <= 0) { spawnEnemy(); toSpawn--; spawnTimer = spawnInterval; }
     }
 
-    // player firing
     playerCooldown -= dt;
-    if (aiming && playerCooldown <= 0) {
-      fireFromPlayer();
-      playerCooldown = 1 / game.fireRate;
-    }
+    if (aiming && playerCooldown <= 0) { fireFromPlayer(); playerCooldown = 1 / game.fireRate; }
 
-    // auto turrets
     for (const t of game.autoTurrets) {
       t.cooldown -= dt;
-      if (t.cooldown <= 0) {
-        if (fireAutoTurret(t)) t.cooldown = 1 / game.autoFireRate;
-        else t.cooldown = 0.1;
-      }
+      if (t.cooldown <= 0) t.cooldown = fireAutoTurret(t) ? 1/game.autoFireRate : 0.1;
     }
 
-    // bullets
     for (let i=bullets.length-1;i>=0;i--){
       const b = bullets[i];
       b.x += b.vx*dt; b.y += b.vy*dt; b.life -= dt;
       if (b.life<=0 || b.x<-50||b.x>W+50||b.y<-50||b.y>H+50){ bullets.splice(i,1); continue; }
-      // collide with enemies
       for (let j=enemies.length-1;j>=0;j--){
         const e = enemies[j];
         if ((b.x-e.x)**2 + (b.y-e.y)**2 <= (e.r+b.r)**2){
-          e.hp -= b.dmg; e.hitFlash = 0.1;
-          spawnHit(b.x, b.y, e.color);
+          e.hp -= b.dmg; e.hitFlash = 0.1; spawnHit(b.x, b.y, e.color);
           bullets.splice(i,1);
           if (e.hp <= 0){
-            game.coins += e.reward;
-            addFloater(e.x, e.y, '+'+e.reward, '#ffd75e');
-            spawnDeath(e.x, e.y, e.color);
-            enemies.splice(j,1);
+            game.coins += e.reward; addFloater(e.x, e.y, '+'+e.reward, '#ffd75e');
+            spawnDeath(e.x, e.y, e.color); enemies.splice(j,1);
           }
           break;
         }
       }
     }
 
-    // enemies move toward tower
     for (let j=enemies.length-1;j>=0;j--){
       const e = enemies[j];
       const dx = game.cx - e.x, dy = game.cy - e.y;
       const dist = Math.hypot(dx, dy) || 1;
+      const gap = dist - game.towerRadius - e.r;     // how close to breaching
+      if (gap < waveClosestGap) waveClosestGap = gap;
       if (dist > game.towerRadius + e.r - 4) {
-        e.x += dx/dist * e.speed * dt;
-        e.y += dy/dist * e.speed * dt;
+        e.x += dx/dist * e.speed * dt; e.y += dy/dist * e.speed * dt;
       } else {
-        // contact: damage tower then die (kamikaze)
-        damageTower(6 + game.wave * 0.6 + (e.type==='tank'?10:0));
-        spawnDeath(e.x, e.y, e.color);
-        enemies.splice(j,1);
+        damageTower(5 + game.wave * 0.5 + (e.type==='tank'?8:0));
+        spawnDeath(e.x, e.y, e.color); enemies.splice(j,1);
       }
       if (e.hitFlash>0) e.hitFlash -= dt;
     }
 
-    // particles
     for (let i=particles.length-1;i>=0;i--){
       const p = particles[i];
       p.x += p.vx*dt; p.y += p.vy*dt; p.vx*=0.92; p.vy*=0.92; p.life-=dt;
       if (p.life<=0) particles.splice(i,1);
     }
-    // floaters
     for (let i=floaters.length-1;i>=0;i--){
       const f = floaters[i]; f.y -= 30*dt; f.life -= dt;
       if (f.life<=0) floaters.splice(i,1);
     }
 
-    // wave end check
-    if (toSpawn === 0 && enemies.length === 0 && state === State.PLAYING) {
-      endWave();
-    }
+    if (toSpawn === 0 && enemies.length === 0 && state === State.PLAYING) endWave();
   }
 
   // ---- Render ----
   function draw() {
     ctx.clearRect(0,0,W,H);
-    // background grid
     ctx.fillStyle = '#0a0e1a'; ctx.fillRect(0,0,W,H);
     ctx.strokeStyle = 'rgba(40,55,90,0.25)'; ctx.lineWidth = 1;
-    const g = 40;
-    ctx.beginPath();
+    const g = 40; ctx.beginPath();
     for (let x=0;x<W;x+=g){ ctx.moveTo(x,0); ctx.lineTo(x,H); }
     for (let y=0;y<H;y+=g){ ctx.moveTo(0,y); ctx.lineTo(W,y); }
     ctx.stroke();
@@ -420,11 +374,9 @@
 
     const {cx, cy, towerRadius} = game;
 
-    // tower area
     ctx.beginPath(); ctx.arc(cx,cy,towerRadius,0,Math.PI*2);
     ctx.fillStyle = 'rgba(50,70,120,0.25)'; ctx.fill();
     ctx.lineWidth = 3; ctx.strokeStyle = '#3b5a9c'; ctx.stroke();
-    // hp ring
     const hpFrac = game.hp/game.maxHp;
     ctx.beginPath();
     ctx.arc(cx,cy,towerRadius+6,-Math.PI/2, -Math.PI/2 + Math.PI*2*hpFrac);
@@ -432,7 +384,6 @@
     ctx.strokeStyle = hpFrac>0.5?'#5ad67a':(hpFrac>0.25?'#ffd75e':'#ef4444');
     ctx.stroke();
 
-    // auto turrets
     for (const t of game.autoTurrets){
       const tx = cx + Math.cos(t.angle)*(towerRadius-16);
       const ty = cy + Math.sin(t.angle)*(towerRadius-16);
@@ -441,28 +392,19 @@
       ctx.lineWidth=2; ctx.strokeStyle='#7fe0a0'; ctx.stroke();
     }
 
-    // aim line
-    if (aiming && state===State.PLAYING){
-      ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(aimX,aimY);
-      ctx.strokeStyle='rgba(255,226,122,0.25)'; ctx.lineWidth=2; ctx.stroke();
-    }
-
-    // player turret (center)
-    let ang = aiming ? Math.atan2(aimY-cy, aimX-cx) : -Math.PI/2;
-    ctx.save(); ctx.translate(cx,cy); ctx.rotate(ang);
-    ctx.fillStyle = '#ffd75e';
-    ctx.fillRect(0,-5,30,10);            // barrel
+    // player turret
+    ctx.save(); ctx.translate(cx,cy); ctx.rotate(aimAngle);
+    ctx.fillStyle = aiming ? '#ffe27a' : '#ffd75e';
+    ctx.fillRect(0,-5,30,10);
     ctx.restore();
     ctx.beginPath(); ctx.arc(cx,cy,16,0,Math.PI*2);
     ctx.fillStyle = '#e8a13e'; ctx.fill();
     ctx.lineWidth=3; ctx.strokeStyle='#fff2c4'; ctx.stroke();
 
-    // enemies
     for (const e of enemies){
       ctx.beginPath(); ctx.arc(e.x,e.y,e.r,0,Math.PI*2);
       ctx.fillStyle = e.hitFlash>0 ? '#ffffff' : e.color; ctx.fill();
       ctx.lineWidth=2; ctx.strokeStyle='rgba(0,0,0,0.4)'; ctx.stroke();
-      // hp bar
       if (e.hp < e.maxHp){
         const bw = e.r*2, f = Math.max(0,e.hp/e.maxHp);
         ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(e.x-e.r, e.y-e.r-8, bw, 4);
@@ -470,77 +412,114 @@
       }
     }
 
-    // bullets
-    for (const b of bullets){
-      ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2);
-      ctx.fillStyle=b.color; ctx.fill();
-    }
+    for (const b of bullets){ ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.fillStyle=b.color; ctx.fill(); }
 
-    // particles
     for (const p of particles){
       ctx.globalAlpha = Math.max(0, p.life/p.maxLife);
-      ctx.fillStyle = p.color;
-      ctx.fillRect(p.x-p.size/2, p.y-p.size/2, p.size, p.size);
+      ctx.fillStyle = p.color; ctx.fillRect(p.x-p.size/2, p.y-p.size/2, p.size, p.size);
     }
     ctx.globalAlpha = 1;
 
-    // floaters
-    ctx.font = 'bold 16px system-ui, Arial';
-    ctx.textAlign = 'center';
+    ctx.font = 'bold 16px system-ui, Arial'; ctx.textAlign = 'center';
     for (const f of floaters){
       ctx.globalAlpha = Math.max(0, f.life/0.8);
       ctx.fillStyle = f.color; ctx.fillText(f.text, f.x, f.y);
     }
     ctx.globalAlpha = 1; ctx.textAlign = 'start';
 
+    // ---- Joystick ----
+    if (state === State.PLAYING) drawStick();
+
     // HUD
-    ctx.fillStyle = '#e8eef7';
-    ctx.font = 'bold 18px system-ui, Arial';
+    ctx.fillStyle = '#e8eef7'; ctx.font = 'bold 18px system-ui, Arial';
     ctx.fillText('Wave ' + game.wave, 16, 30);
-    ctx.fillStyle = '#ffd75e';
-    ctx.fillText('🪙 ' + game.coins, 16, 54);
+    ctx.fillStyle = '#ffd75e'; ctx.fillText('🪙 ' + game.coins, 16, 54);
     ctx.fillStyle = hpFrac>0.25?'#7fe0a0':'#ef4444';
     ctx.fillText('❤ ' + Math.ceil(game.hp) + '/' + game.maxHp, 16, 78);
-    // enemies remaining
-    ctx.fillStyle = '#8aa0c8';
-    ctx.textAlign = 'right';
+    ctx.fillStyle = '#8aa0c8'; ctx.textAlign = 'right';
     ctx.fillText('Enemies: ' + (enemies.length + toSpawn), W-16, 30);
     ctx.textAlign = 'start';
   }
 
-  // ---- Main Loop ----
+  function drawStick() {
+    const bx = stick.active ? stick.baseX : stick.restX;
+    const by = stick.active ? stick.baseY : stick.restY;
+    const kx = stick.active ? stick.knobX : stick.restX;
+    const ky = stick.active ? stick.knobY : stick.restY;
+    ctx.globalAlpha = stick.active ? 0.5 : 0.28;
+    ctx.beginPath(); ctx.arc(bx, by, stick.baseR, 0, Math.PI*2);
+    ctx.fillStyle = '#1d2740'; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = '#3b5a9c'; ctx.stroke();
+    ctx.globalAlpha = stick.active ? 0.95 : 0.5;
+    ctx.beginPath(); ctx.arc(kx, ky, stick.knobR, 0, Math.PI*2);
+    ctx.fillStyle = '#3b82f6'; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = '#9bc0ff'; ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  // ---- Loop ----
   let last = performance.now();
   function loop(now) {
     let dt = (now - last) / 1000; last = now;
-    if (dt > 0.05) dt = 0.05; // clamp
-    update(dt);
-    draw();
+    if (dt > 0.05) dt = 0.05;
+    update(dt); draw();
     requestAnimationFrame(loop);
   }
-  requestAnimationFrame(loop);
 
-  // ---- Input ----
-  function pos(e) {
-    const t = e.touches ? e.touches[0] : e;
-    return { x: t.clientX, y: t.clientY };
+  // ---- Input (floating joystick in lower screen band) ----
+  function getTouchById(e, id) {
+    for (const t of e.changedTouches) if (t.identifier === id) return t;
+    return null;
   }
-  function onDown(e){
+  function startStick(x, y, id) {
+    stick.active = true; stick.id = id;
+    stick.baseX = x; stick.baseY = y; stick.knobX = x; stick.knobY = y;
+    updateStick(x, y);
+  }
+  function updateStick(x, y) {
+    let dx = x - stick.baseX, dy = y - stick.baseY;
+    const dist = Math.hypot(dx, dy);
+    if (dist > stick.baseR) { dx = dx/dist*stick.baseR; dy = dy/dist*stick.baseR; }
+    stick.knobX = stick.baseX + dx; stick.knobY = stick.baseY + dy;
+    stick.mag = Math.min(1, dist / stick.baseR);
+    if (stick.mag > stick.deadzone) {
+      stick.angle = Math.atan2(dy, dx);
+      aimAngle = stick.angle; aiming = true;
+    } else { aiming = false; }
+  }
+  function endStick() {
+    stick.active = false; stick.id = null; aiming = false;
+  }
+
+  function onTouchStart(e) {
     if (state !== State.PLAYING) return;
     e.preventDefault();
-    aiming = true; const p = pos(e); aimX = p.x; aimY = p.y;
-    playerCooldown = 0; // fire immediately
+    if (stick.active) return;
+    for (const t of e.changedTouches) {
+      // activate joystick from anywhere; base appears at touch point
+      startStick(t.clientX, t.clientY, t.identifier);
+      break;
+    }
   }
-  function onMove(e){
-    if (!aiming) return; e.preventDefault();
-    const p = pos(e); aimX = p.x; aimY = p.y;
+  function onTouchMove(e) {
+    if (!stick.active) return;
+    e.preventDefault();
+    const t = getTouchById(e, stick.id);
+    if (t) updateStick(t.clientX, t.clientY);
   }
-  function onUp(e){ aiming = false; }
-  canvas.addEventListener('touchstart', onDown, {passive:false});
-  canvas.addEventListener('touchmove', onMove, {passive:false});
-  canvas.addEventListener('touchend', onUp);
-  canvas.addEventListener('mousedown', onDown);
-  canvas.addEventListener('mousemove', onMove);
-  canvas.addEventListener('mouseup', onUp);
+  function onTouchEnd(e) {
+    if (!stick.active) return;
+    if (getTouchById(e, stick.id)) endStick();
+  }
+  canvas.addEventListener('touchstart', onTouchStart, {passive:false});
+  canvas.addEventListener('touchmove', onTouchMove, {passive:false});
+  canvas.addEventListener('touchend', onTouchEnd);
+  canvas.addEventListener('touchcancel', onTouchEnd);
+
+  // mouse fallback for desktop testing
+  canvas.addEventListener('mousedown', e => { if (state===State.PLAYING) startStick(e.clientX, e.clientY, 'mouse'); });
+  canvas.addEventListener('mousemove', e => { if (stick.active) updateStick(e.clientX, e.clientY); });
+  window.addEventListener('mouseup', () => { if (stick.active) endStick(); });
 
   // ---- UI ----
   function hideAll(){ document.querySelectorAll('.overlay').forEach(o=>o.classList.remove('show')); }
@@ -555,29 +534,41 @@
 
   function renderUpgrades() {
     const offense = ['fireRate','damage','autoTurret','autoPower'];
-    const defense = ['maxHp','regen'];
+    const defense = ['maxHp','regen','repair'];
     const offEl = document.getElementById('offenseUpgrades');
     const defEl = document.getElementById('defenseUpgrades');
     offEl.innerHTML = ''; defEl.innerHTML = '';
     const build = (key, container) => {
       const u = upgrades[key];
-      const lvl = game.lv[key];
-      const maxed = lvl >= u.max;
       const cost = upgradeCost(key);
+      const isRepair = !!u.repair;
+      const lvl = isRepair ? null : game.lv[key];
+      const maxed = !isRepair && lvl >= u.max;
+      const cantAfford = game.coins < cost;
+      const repairFull = isRepair && game.hp >= game.maxHp;
       const btn = document.createElement('button');
       btn.className = 'up';
-      btn.disabled = maxed || game.coins < cost;
-      btn.innerHTML = `<span class="cost">${maxed?'MAX':'🪙'+cost}</span>
+      btn.disabled = maxed || cantAfford || repairFull;
+      const right = maxed ? 'MAX' : (repairFull ? 'FULL' : '🪙'+cost);
+      const lvlLine = isRepair
+        ? `<span class="lvl">${Math.ceil(game.hp)}/${game.maxHp} HP</span>`
+        : `<span class="lvl">Lv ${lvl}${maxed?'':' → '+(lvl+1)}</span>`;
+      btn.innerHTML = `<span class="cost">${right}</span>
         <span class="name">${u.name}</span>
-        <span class="lvl">Lv ${lvl}${maxed?'':' → '+(lvl+1)}</span><br>
+        ${lvlLine}<br>
         <span style="color:#8aa0c8;font-size:11px">${u.desc}</span>`;
       btn.onclick = () => {
         const c = upgradeCost(key);
-        if (game.coins >= c && game.lv[key] < u.max) {
+        if (game.coins < c) return;
+        if (isRepair) {
+          if (game.hp >= game.maxHp) return;
+          game.coins -= c; game.hp = Math.min(game.maxHp, game.hp + u.healAmount);
+        } else {
+          if (game.lv[key] >= u.max) return;
           game.coins -= c; game.lv[key]++; u.apply();
-          document.getElementById('shopCoins').textContent = game.coins;
-          renderUpgrades();
         }
+        document.getElementById('shopCoins').textContent = game.coins;
+        renderUpgrades();
       };
       container.appendChild(btn);
     };
@@ -589,8 +580,9 @@
   document.getElementById('restartBtn').onclick = startGame;
   document.getElementById('nextWaveBtn').onclick = startWave;
 
-  // show start
+  resize();
   show('startScreen');
+  requestAnimationFrame(loop);
 })();
 </script>
 </body>
