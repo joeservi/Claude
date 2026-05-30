@@ -30,6 +30,6 @@ To play a game:
 
 - **clicker-game** — Incremental/idle clicker with upgrades
 - **snake-game** — Classic snake with touch controls
-- **tower-defender** — Hold-to-aim turret defense with waves, coins, and an upgrade shop (offense + defense). Difficulty adapts to your skill.
+- **tower-defender** — Full 3D (three.js) perspective turret defense. Sweep your turret to fire down a battlefield as enemies advance from the distance; earn coins, spend them in an offense/defense upgrade shop, and build up to 4 auto-turrets. Adaptive difficulty ramps faster the harder you dominate. Uses WebGL with bloom post-processing; three.js is vendored locally in `tower-defender/vendor/` so it runs offline.
 
 Check the `games/` folder for pre-built games ready to play!
