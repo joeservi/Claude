@@ -133,7 +133,7 @@ const scene = new THREE.Scene();
 scene.background = makeSkyTexture();
 scene.fog = new THREE.Fog(0x0a1024, 34, 92);
 
-const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 220);
+const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 220);
 camera.position.set(0, 14, 13.5);
 camera.lookAt(0, 1.5, -16);
 
@@ -165,6 +165,77 @@ const rim = new THREE.DirectionalLight(0x5577ff, 0.5);
 rim.position.set(6, 8, -20);
 scene.add(rim);
 
+// ====================== Textures & Materials ======================
+function makeNoiseTexture(w, h, scale, seed = 0) {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d'), img = ctx.createImageData(w, h);
+  const data = img.data;
+  for (let i = 0; i < w * h; i++) {
+    let v = Math.sin(i * seed + Math.cos(i * 0.1)) * 0.5 + 0.5;
+    v = Math.pow(v, 1.8);
+    const c = Math.floor(v * 255);
+    data[i*4] = c; data[i*4+1] = c; data[i*4+2] = c; data[i*4+3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+function makeBrickTexture(w, h) {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#3a4866'; ctx.fillRect(0, 0, w, h);
+  const brickW = w / 8, brickH = h / 6;
+  ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1.5;
+  for (let y = 0; y < h; y += brickH) {
+    const off = ((y / brickH) % 2) * brickW / 2;
+    for (let x = off; x < w; x += brickW) {
+      ctx.strokeRect(x, y, brickW - 1, brickH - 1);
+      // mortar highlight
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.fillRect(x + 1, y + 1, brickW - 3, 1);
+    }
+  }
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+function makeMetalTexture(w, h) {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, '#8a9ab8'); g.addColorStop(0.5, '#5a6a88'); g.addColorStop(1, '#3a4a68');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+  for (let i = 0; i < 120; i++) {
+    const x = Math.random() * w, y = Math.random() * h;
+    ctx.fillStyle = `rgba(255,255,255,${Math.random() * 0.15})`;
+    ctx.fillRect(x, y, Math.random() * 3 + 0.5, Math.random() * 1.5 + 0.5);
+  }
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+function makeGroundTexture(w, h) {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#0a0f1a'; ctx.fillRect(0, 0, w, h);
+  for (let i = 0; i < 1200; i++) {
+    const x = Math.random() * w, y = Math.random() * h;
+    const c = Math.floor(Math.random() * 30 + 15);
+    ctx.fillStyle = `rgb(${c},${c+5},${c+10})`;
+    ctx.fillRect(x, y, Math.random() * 2.5 + 0.3, Math.random() * 2.5 + 0.3);
+  }
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.magFilter = THREE.NearestFilter; return t;
+}
+function makeNormalMap(w, h) {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d'), img = ctx.createImageData(w, h);
+  const data = img.data;
+  for (let i = 0; i < w * h; i++) {
+    const v = Math.sin(i * 0.03 + Math.cos(i * 0.001)) * 0.5 + 0.5;
+    data[i*4] = Math.floor(v * 200 + 30);     // R
+    data[i*4+1] = Math.floor(v * 200 + 30);   // G
+    data[i*4+2] = 255;                         // B (normal Z)
+    data[i*4+3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.LinearSRGBColorSpace; return t;
+}
+
 // ====================== Environment ======================
 function makeSkyTexture() {
   const cv = document.createElement('canvas'); cv.width = 16; cv.height = 256;
@@ -173,12 +244,18 @@ function makeSkyTexture() {
   const ctx = cv.getContext('2d'); ctx.fillStyle = g; ctx.fillRect(0, 0, 16, 256);
   const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; return tex;
 }
-// Ground
-const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(160, 200),
-  new THREE.MeshStandardMaterial({ color: 0x0a1020, roughness: 0.95, metalness: 0.1 })
-);
-ground.rotation.x = -Math.PI / 2; ground.position.z = -40;
+// Ground with procedural texture
+const groundMat = new THREE.MeshStandardMaterial({
+  map: makeGroundTexture(256, 256),
+  roughness: 0.92,
+  metalness: 0.05,
+  normalMap: makeNormalMap(128, 128),
+  normalScale: new THREE.Vector2(0.6, 0.6)
+});
+groundMat.map.repeat.set(12, 16); groundMat.map.wrapS = groundMat.map.wrapT = THREE.RepeatWrapping;
+groundMat.normalMap.repeat.set(8, 10); groundMat.normalMap.wrapS = groundMat.normalMap.wrapT = THREE.RepeatWrapping;
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(160, 200), groundMat);
+ground.rotation.x = -Math.PI / 2; ground.position.z = -40; ground.receiveShadow = true;
 scene.add(ground);
 // Glowing grid
 const grid = new THREE.GridHelper(160, 64, 0x2f6bd0, 0x16345f);
@@ -205,13 +282,24 @@ for (const sx of [-1, 1]) {
 
 // ====================== Fortress wall ======================
 const wallGroup = new THREE.Group();
-const stoneMat = new THREE.MeshStandardMaterial({ color: 0x3a4866, roughness: 0.85, metalness: 0.2 });
+const brickTex = makeBrickTexture(256, 128);
+const stoneMat = new THREE.MeshStandardMaterial({
+  map: brickTex,
+  roughness: 0.88,
+  metalness: 0.15,
+  normalMap: makeNormalMap(128, 64),
+  normalScale: new THREE.Vector2(0.4, 0.4)
+});
+stoneMat.map.repeat.set(4, 2); stoneMat.map.wrapS = stoneMat.map.wrapT = THREE.RepeatWrapping;
+stoneMat.normalMap.repeat.set(2, 1); stoneMat.normalMap.wrapS = stoneMat.normalMap.wrapT = THREE.RepeatWrapping;
 const wallBody = new THREE.Mesh(new THREE.BoxGeometry(34, 2.4, 1.6), stoneMat);
-wallBody.position.set(0, 1.2, 0.6); wallGroup.add(wallBody);
+wallBody.position.set(0, 1.2, 0.6); wallBody.castShadow = true; wallBody.receiveShadow = true;
+wallGroup.add(wallBody);
 // merlons
 for (let x = -16; x <= 16; x += 2.4) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.0, 1.6), stoneMat);
-  m.position.set(x, 2.7, 0.6); wallGroup.add(m);
+  m.position.set(x, 2.7, 0.6); m.castShadow = true; m.receiveShadow = true;
+  wallGroup.add(m);
 }
 // HP shield bar on the front face of the wall
 const hpBarMat = new THREE.MeshBasicMaterial({ color: 0x5be08a, transparent: true, opacity: 0.95 });
@@ -225,6 +313,8 @@ scene.add(wallGroup);
 // ====================== Shared assets ======================
 const blobTex = makeRadialTexture('rgba(0,0,0,0.55)', 'rgba(0,0,0,0)');
 const sparkTex = makeRadialTexture('rgba(255,255,255,1)', 'rgba(255,255,255,0)');
+const metalTex = makeMetalTexture(256, 256);
+const metalNorm = makeNormalMap(128, 128);
 function makeRadialTexture(inner, outer) {
   const cv = document.createElement('canvas'); cv.width = cv.height = 64;
   const ctx = cv.getContext('2d');
@@ -249,8 +339,14 @@ const ENEMY_GEO = {
 const EYE_GEO = new THREE.SphereGeometry(0.26, 10, 10);
 
 // ====================== Turret meshes ======================
-const metalMat = new THREE.MeshStandardMaterial({ color: 0x6a7a98, roughness: 0.35, metalness: 0.85 });
-const goldMat = new THREE.MeshStandardMaterial({ color: 0xd8b24a, roughness: 0.3, metalness: 0.9, emissive: 0x4a3a00, emissiveIntensity: 0.4 });
+const metalMat = new THREE.MeshStandardMaterial({
+  map: metalTex, color: 0xaabbcc, roughness: 0.25, metalness: 0.95, normalMap: metalNorm, normalScale: new THREE.Vector2(0.8, 0.8)
+});
+metalTex.repeat.set(2, 2); metalTex.wrapS = metalTex.wrapT = THREE.RepeatWrapping;
+metalNorm.repeat.set(2, 2); metalNorm.wrapS = metalNorm.wrapT = THREE.RepeatWrapping;
+const goldMat = new THREE.MeshStandardMaterial({
+  map: metalTex.clone(), color: 0xe8c24a, roughness: 0.22, metalness: 0.92, emissive: 0x6a5a20, emissiveIntensity: 0.5, normalMap: metalNorm
+});
 const coreMat = new THREE.MeshBasicMaterial({ color: 0xfff0a0 });
 
 function buildTurret(scale, accent) {
@@ -278,6 +374,13 @@ function buildTurret(scale, accent) {
 const mainTurret = buildTurret(1.0, 'gold');
 mainTurret.group.position.set(0, 0, WALL_Z);
 scene.add(mainTurret.group);
+
+// Aim guide line
+const aimLineMat = new THREE.LineBasicMaterial({ color: 0xffed78, linewidth: 2, transparent: true, opacity: 0.4, fog: false });
+const aimLineGeo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(2*3), 3));
+const aimLine = new THREE.Line(aimLineGeo, aimLineMat);
+aimLine.layers.set(0); aimLine.frustumCulled = false;
+scene.add(aimLine);
 
 // ====================== Game model ======================
 const game = {
@@ -501,6 +604,15 @@ function update(dt) {
   mainTurret.core.material.color.setRGB(1, 0.94, 0.6 + 0.25 * Math.sin(t * 5));
   mainTurret.yawGrp.rotation.y = -yaw;
 
+  // Update aim guide line
+  const aimPos = aimLine.geometry.attributes.position.array;
+  const m = new THREE.Vector3(); mainTurret.muzzle.getWorldPosition(m);
+  const dir = Math.sin(yaw), dirFwd = -Math.cos(yaw);
+  const rayLen = 52;
+  aimPos[0] = m.x; aimPos[1] = m.y; aimPos[2] = m.z;
+  aimPos[3] = m.x + dir*rayLen; aimPos[4] = m.y; aimPos[5] = m.z + dirFwd*rayLen;
+  aimLine.geometry.attributes.position.needsUpdate = true;
+
   // HP shield bar
   const hpFrac = Math.max(0, game.hp / game.maxHp);
   hpBar.scale.x = Math.max(0.001, hpFrac);
@@ -716,8 +828,9 @@ const knob = document.getElementById('knob');
 let aiming = false, aimId = null;
 function setYawFromX(clientX) {
   const tval = (clientX - window.innerWidth / 2) / (window.innerWidth / 2); // -1..1
-  yaw = Math.max(-1, Math.min(1, tval)) * MAX_YAW;
-  knob.style.left = (50 + Math.max(-1, Math.min(1, tval)) * 46) + '%';
+  const clamped = Math.max(-1, Math.min(1, tval));
+  yaw = -clamped * MAX_YAW;  // inverted: push right = aim left
+  knob.style.left = (50 + clamped * 46) + '%';  // knob tracks touch position
 }
 function isUI(target) { return target.closest && target.closest('button'); }
 canvas.addEventListener('touchstart', e => {
