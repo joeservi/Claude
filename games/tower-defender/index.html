@@ -17,7 +17,7 @@
   #hud .coins { font-size: 17px; font-weight: 700; color: #ffe066; margin-top: 2px; }
   #hud .hp { font-size: 17px; font-weight: 700; margin-top: 2px; }
   #enemyCount { position: fixed; top: 12px; right: 14px; z-index: 50; color: #9fb4d8; font-size: 15px; font-weight: 700; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,0.7); }
-  #uiButtons { position: fixed; top: 44px; right: 12px; display: flex; gap: 8px; z-index: 100; }
+  #uiButtons { position: fixed; top: 145px; right: 12px; display: flex; gap: 8px; z-index: 100; }
   .uiBtn { width: 44px; height: 44px; border: 1px solid rgba(120,160,220,0.25); border-radius: 12px; background: rgba(30,42,68,0.82); color: #cfe0ff; font-size: 19px; cursor: pointer; box-shadow: 0 3px 10px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.12); backdrop-filter: blur(4px); transition: all 0.15s; }
   .uiBtn:active { transform: scale(0.92); }
   #stick { position: fixed; left: 8px; right: 8px; bottom: 14px; height: 48px; z-index: 40; border-radius: 24px; background: linear-gradient(180deg, rgba(22,30,52,0.82), rgba(12,17,32,0.82)); border: 1px solid rgba(90,130,190,0.4); pointer-events: none; overflow: hidden; }
@@ -370,6 +370,7 @@ const game = {
   lv: { fireRate:0, damage:0, autoTurret:0, autoPower:0, maxHp:0, regen:0, pierce:0 },
   diff: 0.9,
   waveDuration: 35,
+  waveTimer: 0,
 };
 const State = { START:0, PLAYING:1, SHOP:2, GAMEOVER:3, PAUSE:4, WAVE_SUMMARY:5 };
 let state = State.START, prevState = State.START;
@@ -459,8 +460,8 @@ function spawnEnemy() {
   // Size proportional to HP: radius scales with cube root so volume ~ HP
   const r = Math.max(0.9, Math.min(3.4, 0.55 * Math.cbrt(hp)));
 
-  // Speed: smaller enemies are faster; everything slowly speeds up per wave
-  const baseSpeed = 3.2 + game.wave * 0.18;
+  // Speed: smaller enemies are faster; speeds increase significantly each wave
+  const baseSpeed = 5.0 + game.wave * 0.35;
   const speed = baseSpeed * (1.9 / (r + 0.7));
 
   // Shape & color tier based on size (more sides as it grows)
@@ -548,6 +549,22 @@ function getTargetDifficultyRatio(wave) {
   return 1.2 - ((wave - 1) * 0.4 / 9);
 }
 
+function calculateWaveDuration(waveHP, wave) {
+  // Consistent duration calculation used by both startWave and shop projection
+  // Based on: spawn time + travel time for enemies
+  // Estimate queue size from expected average enemy HP
+  spawnInterval = Math.max(0.3, 0.9 - wave * 0.02);
+  const avgEnemyHP = 18; // Typical average (between minHP and maxHP)
+  const estimatedQueueLength = Math.max(3, Math.round(waveHP / avgEnemyHP));
+  const spawnTime = (estimatedQueueLength - 1) * spawnInterval;
+
+  // Travel time: distance 52, with faster speeds each wave
+  const baselineSpeed = 5.0 + wave * 0.35;
+  const travelTime = 52 / baselineSpeed + 2; // +2 second buffer for last enemy
+
+  return Math.round(spawnTime + travelTime);
+}
+
 function startWave() {
   game.wave++;
   game.bestWave = Math.max(game.bestWave, game.wave);
@@ -562,9 +579,11 @@ function startWave() {
   // Wave 1: accuracy = 50%; Wave 2+: previous wave's accuracy
   const accuracyForCalc = game.wave === 1 ? 0.5 : lastWaveAccuracy;
 
-  // First pass: estimate waveHP using baseline wave duration
-  let baselineWaveDuration = 40 + game.wave * 2.0;
-  let effectiveDamage = baselineWaveDuration * ((playerMainDPS * accuracyForCalc) + playerAutoDPS + game.hpRegen);
+  // Estimate wave duration
+  let estimatedDuration = calculateWaveDuration(1000, game.wave); // Rough estimate
+
+  // Calculate waveHP using estimated duration
+  let effectiveDamage = estimatedDuration * ((playerMainDPS * accuracyForCalc) + playerAutoDPS + game.hpRegen);
   let waveHP = Math.round(effectiveDamage / targetRatio);
 
   // Build wave composition: a list of enemy HP values that sum EXACTLY to waveHP
@@ -575,28 +594,26 @@ function startWave() {
   spawnTimer = 0;
   spawnInterval = Math.max(0.3, 0.9 - game.wave * 0.02);
 
-  // Calculate actual wave duration from queue
-  // Duration = spawn time (time from first to last enemy) + travel time for last enemy
+  // Recalculate duration with actual queue
   const spawnTime = (spawnQueue.length - 1) * spawnInterval;
-  // Travel time: distance 52 units, enemies get slower in later waves
-  const baselineSpeed = 3.2 + game.wave * 0.18;
-  const travelTimeEst = 52 / baselineSpeed + game.wave * 1.2;
-  const calculatedWaveDuration = Math.round(spawnTime + travelTimeEst);
+  const baselineSpeed = 5.0 + game.wave * 0.35;
+  const travelTime = 52 / baselineSpeed + 2;
+  const calculatedDuration = Math.round(spawnTime + travelTime);
 
-  // Recalculate waveHP with actual duration
-  effectiveDamage = calculatedWaveDuration * ((playerMainDPS * accuracyForCalc) + playerAutoDPS + game.hpRegen);
-  waveHP = Math.round(effectiveDamage / targetRatio);
+  // Recalculate waveHP if duration changed significantly
+  effectiveDamage = calculatedDuration * ((playerMainDPS * accuracyForCalc) + playerAutoDPS + game.hpRegen);
+  const newWaveHP = Math.round(effectiveDamage / targetRatio);
 
-  // If waveHP changed significantly, rebuild queue once
-  const queueSum = spawnQueue.reduce((a, b) => a + b, 0);
-  if (Math.abs(waveHP - queueSum) > Math.max(5, queueSum * 0.15)) {
+  if (Math.abs(newWaveHP - waveHP) > Math.max(5, waveHP * 0.15)) {
+    waveHP = newWaveHP;
     spawnQueue = buildWaveComposition(waveHP, game.wave);
     spawnIndex = 0;
     toSpawn = spawnQueue.length;
   }
 
   // Store calculated duration for this wave
-  game.waveDuration = calculatedWaveDuration;
+  game.waveDuration = calculatedDuration;
+  game.waveTimer = 0;
 
   expectedNextWaveHP = waveHP;
   expectedNextDPS = playerMainDPS;
@@ -611,8 +628,8 @@ function buildWaveComposition(waveHP, wave) {
   // Produce enemy HP chunks summing exactly to waveHP.
   // More enemies per wave as it progresses; enemies just get bigger overall.
   const queue = [];
-  const minHP = Math.max(4, 8 - wave * 0.3); // Smaller minimum in later waves = more enemies
-  const maxHP = Math.max(minHP * 2, waveHP * (0.15 + Math.min(0.20, wave * 0.012))); // Slightly tighter max to force more variety
+  const minHP = Math.max(3, 8 - wave * 0.5); // More aggressive: smaller min in later waves = many more enemies
+  const maxHP = Math.max(minHP * 2, waveHP * (0.12 + Math.min(0.18, wave * 0.01))); // Tighter max to force more variety
   let remaining = waveHP;
   let guard = 0;
   while (remaining > 0 && guard++ < 200) {
@@ -728,8 +745,8 @@ function calculateNextWaveHP() {
   const playerMainDPS = game.damage * game.fireRate;
   const playerAutoDPS = game.autoTurrets.length * game.autoDamage * game.autoFireRate;
 
-  // Estimate next wave duration: baseline + progression
-  const estNextWaveDuration = 40 + nextWave * 2.0;
+  // Use the same duration calculation as startWave for consistency
+  const estNextWaveDuration = calculateWaveDuration(1000, nextWave); // 1000 is dummy, uses avgEnemyHP estimate
 
   const effectiveDamage = estNextWaveDuration * ((playerMainDPS * lastWaveAccuracy) + playerAutoDPS + game.hpRegen);
   const nextWaveHP = Math.round(effectiveDamage / targetRatio);
@@ -776,6 +793,7 @@ function update(dt) {
   hpBar.material.color.set(hpFrac > 0.5 ? 0x5be08a : (hpFrac > 0.25 ? 0xffd24a : 0xff4a3d));
 
   if (state === State.PLAYING) {
+    game.waveTimer += dt;
     if (game.hpRegen > 0 && game.hp < game.maxHp) game.hp = Math.min(game.maxHp, game.hp + game.hpRegen * dt);
     if (toSpawn > 0) { spawnTimer -= dt; if (spawnTimer <= 0) { spawnEnemy(); toSpawn--; spawnTimer = spawnInterval; } }
     playerCooldown -= dt;
@@ -885,7 +903,7 @@ function update(dt) {
 }
 
 function updateHUD() {
-  hudWave.textContent = 'WAVE ' + game.wave;
+  hudWave.textContent = 'WAVE ' + game.wave + (state === State.PLAYING ? ' ⏱ ' + Math.ceil(game.waveTimer) + 's' : '');
   hudCoins.textContent = '🪙 ' + game.coins;
   const f = game.hp / game.maxHp;
   hudHp.textContent = '❤ ' + Math.ceil(game.hp) + '/' + game.maxHp;
@@ -953,7 +971,7 @@ function resetGame() {
   game.coins = 0; game.wave = 0; game.maxHp = 100; game.hp = 100; game.hpRegen = 0;
   game.fireRate = 2.0; game.damage = 8; game.pierce = 0; game.autoDamage = 5; game.autoFireRate = 1.0;
   game.lv = { fireRate:0, damage:0, autoTurret:0, autoPower:0, maxHp:0, regen:0, pierce:0 };
-  game.diff = 0.9; game.waveDuration = 35; yaw = 0; playerCooldown = 0;
+  game.diff = 0.9; game.waveDuration = 35; game.waveTimer = 0; yaw = 0; playerCooldown = 0;
   mainBulletsFired = 0; mainBulletsHit = 0;
   lastDiffMultiplier = 1; lastPerformanceRatio = 1; lastCoinsEarned = 0;
   expectedNextWaveHP = 0; expectedNextDPS = 0;
