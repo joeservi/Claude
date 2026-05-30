@@ -47,7 +47,7 @@
 <div id="stick"><div class="mid"></div><div id="knob"></div></div>
 <div class="overlay show" id="startScreen"><div class="panel"><h1>🏰 Tower Defender 3D</h1><div class="sub">Drag anywhere along the bottom to sweep your turret left & right.<br>Enemies advance from the distance — hold the line.</div><button class="btn" id="startBtn">START</button></div></div>
 <div class="overlay" id="pauseScreen"><div class="panel"><h1>⏸ PAUSED</h1><div class="sub">Game paused. Resume when ready.</div><button class="btn" id="resumeBtn">RESUME</button></div></div>
-<div class="overlay" id="shopScreen"><div class="panel"><h1 id="shopTitle">Wave Cleared!</h1><div class="sub" id="shopSub">Spend coins, then start the next wave.</div><div class="coins">🪙 <span id="shopCoins">0</span></div><div class="shop-grid"><div class="shop-col"><h3>⚔️ Offense</h3><div id="offenseUpgrades"></div></div><div class="shop-col"><h3>🛡️ Defense</h3><div id="defenseUpgrades"></div></div></div><button class="btn" id="nextWaveBtn">START WAVE</button></div></div>
+<div class="overlay" id="shopScreen"><div class="panel"><h1 id="shopTitle">Wave Cleared!</h1><div class="sub" id="shopSub">Spend coins, then start the next wave.</div><div class="coins">🪙 <span id="shopCoins">0</span></div><div style="text-align:center;color:#6ee08a;font-size:16px;font-weight:700;margin-bottom:16px">❤ <span id="shopHp">100</span>/<span id="shopMaxHp">100</span> HP</div><div class="shop-grid"><div class="shop-col"><h3>⚔️ Offense</h3><div id="offenseUpgrades"></div></div><div class="shop-col"><h3>🛡️ Defense</h3><div id="defenseUpgrades"></div></div></div><button class="btn" id="nextWaveBtn">START WAVE</button></div></div>
 <div class="overlay" id="gameOverScreen"><div class="panel"><h1>💀 Tower Destroyed</h1><div class="sub" id="gameOverSub">You held out for a while.</div><div class="coins">Best Wave: <span id="bestWave">0</span></div><button class="btn danger" id="restartBtn">TRY AGAIN</button></div></div>
 
 <script type="importmap">
@@ -285,6 +285,10 @@ let waveStartHp = 100, waveClosestGap = Infinity, shakeT = 0;
 let clock = new THREE.Clock();
 const enemies = [];
 
+// Accuracy tracking
+let bulletsFired = 0, bulletsHit = 0;
+let waveEnemyHP = 0;
+
 // Bullet pool
 const bulletGeo = new THREE.SphereGeometry(0.35, 10, 10);
 const bulletMatP = new THREE.MeshBasicMaterial({ color: 0xffe24a });
@@ -304,6 +308,7 @@ function spawnBullet(x, y, z, dx, dz, speed, dmg, isPlayer) {
     b.hitEnemies.clear();
     b.mesh.material = isPlayer ? bulletMatP : bulletMatA;
     b.mesh.position.set(x, y, z); b.mesh.visible = true;
+    bulletsFired++;
     return;
   }
 }
@@ -398,6 +403,7 @@ function spawnEnemy() {
   barFill.position.set(-r * 1.15, r * 2.2, 0.01); barFill.visible = false; g.add(barFill);
 
   scene.add(g);
+  waveEnemyHP += hp;
   enemies.push({ g, mesh, mat, baseEI: 0.5, x, z: SPAWN_Z, hp, maxHp: hp, speed, r, reward, type, color, eyeColor,
     hitFlash: 0, bob: Math.random() * Math.PI * 2, barBg, barFill, barW: r * 2.3 });
 }
@@ -442,21 +448,49 @@ function startWave() {
   spawnTimer = 0;
   spawnInterval = Math.max(0.3, 0.9 - game.wave * 0.02);
   waveStartHp = game.hp; waveClosestGap = Infinity;
+  waveEnemyHP = 0;
+  bulletsFired = 0; bulletsHit = 0;
   state = State.PLAYING; hideAll();
 }
 
 function endWave() {
-  const gap = Math.max(0, waveClosestGap === Infinity ? 60 : waveClosestGap);
-  const proximityDanger = 1 - Math.min(1, gap / 18);
-  const hpLostFrac = Math.max(0, waveStartHp - game.hp) / game.maxHp;
-  const threat = Math.max(proximityDanger, hpLostFrac * 1.2);
-  if (threat < 0.10) game.diff *= 1.45;
-  else if (threat < 0.20) game.diff *= 1.32;
-  else if (threat < 0.35) game.diff *= 1.20;
-  else if (threat < 0.50) game.diff *= 1.10;
-  else if (threat < 0.70) game.diff *= 1.02;
-  else game.diff *= 0.92;
+  // === Sophisticated Adaptive Difficulty ===
+  // Connect: Player DPS × Accuracy → Wave Enemy HP → Difficulty Scaling
+  // Lower accuracy = slower difficulty growth (accommodates player skill)
+
+  // 1. Player effective firepower (DPS accounting for accuracy)
+  const mainTurretDPS = game.damage * game.fireRate;
+  const autoTurretsDPS = game.autoTurrets.length * game.autoDamage * game.autoFireRate;
+  const totalDPS = mainTurretDPS + autoTurretsDPS;
+  const accuracy = bulletsFired > 0 ? Math.max(0, bulletsHit / bulletsFired) : 0.3;
+  const effectiveFirepower = totalDPS * accuracy;
+
+  // 2. Wave difficulty (total enemy HP that needed to be killed)
+  const waveDifficulty = Math.max(1, waveEnemyHP);
+
+  // 3. Performance metric: how much firepower was available vs needed
+  const performanceRatio = effectiveFirepower / waveDifficulty;
+
+  // 4. Determine base difficulty multiplier from performance
+  let baseDiffMultiplier = 1;
+  if (performanceRatio > 2.5) baseDiffMultiplier = 1.70;     // Extreme overkill
+  else if (performanceRatio > 2.0) baseDiffMultiplier = 1.55; // Massive overkill
+  else if (performanceRatio > 1.5) baseDiffMultiplier = 1.35; // Strong dominance
+  else if (performanceRatio > 1.2) baseDiffMultiplier = 1.15; // Comfortable win
+  else if (performanceRatio > 1.0) baseDiffMultiplier = 1.04; // Slight edge
+  else if (performanceRatio > 0.8) baseDiffMultiplier = 0.96; // Close call
+  else if (performanceRatio > 0.6) baseDiffMultiplier = 0.82; // Struggling
+  else if (performanceRatio > 0.4) baseDiffMultiplier = 0.70; // Very difficult
+  else baseDiffMultiplier = 0.60;                            // Overwhelming
+
+  // 5. Apply accuracy modifier: lower accuracy = slower difficulty growth
+  // This compensates for lower-skill players by not punishing them as hard
+  const accuracyFactor = 0.4 + 1.6 * accuracy;  // ranges 0.4 (30% accuracy) to 2.0 (100% accuracy)
+  const adjustedMultiplier = 1 + (baseDiffMultiplier - 1) * accuracyFactor;
+
+  game.diff *= adjustedMultiplier;
   game.diff = Math.max(0.8, Math.min(game.diff, 9));
+
   game.coins += 8 + game.wave * 3;
   playSound(523, 0.18, 'sine', 0.18); playSound(659, 0.2, 'sine', 0.18);
   state = State.SHOP; showShop();
@@ -559,6 +593,7 @@ function update(dt) {
         e.hp -= dmg;
         e.hitFlash = 0.12;
         burst(bx, e.r, bz, e.eyeColor, 4, 4, 0.14);
+        bulletsHit++;
         b.hitEnemies.add(j);
         if (e.hp <= 0) {
           game.coins += e.reward; addFloater(e.x, e.r + 1.5, e.z, '+' + e.reward, '#ffe24a');
@@ -676,6 +711,8 @@ function show(id){ hideAll(); document.getElementById(id).classList.add('show');
 function showShop() {
   document.getElementById('shopTitle').textContent = `Wave ${game.wave} Cleared!`;
   document.getElementById('shopCoins').textContent = game.coins;
+  document.getElementById('shopHp').textContent = Math.ceil(game.hp);
+  document.getElementById('shopMaxHp').textContent = game.maxHp;
   renderUpgrades(); show('shopScreen');
 }
 
