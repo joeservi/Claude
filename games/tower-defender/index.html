@@ -47,12 +47,13 @@
 <canvas id="c"></canvas>
 <div id="dashboard">
   <div style="font-weight:700;margin-bottom:4px;color:#9fb4d8">Wave <span id="dashWaveNum">1</span></div>
-  <div><span class="label">DPS:</span> <span class="value" id="dashDPS">0.0</span></div>
-  <div><span class="label">Enemy HP:</span> <span class="value" id="dashEnemyHP">0</span></div>
+  <div><span class="label">Player DPS:</span> <span class="value" id="dashDPS">0.0</span></div>
+  <div><span class="label">Auto DPS:</span> <span class="value" id="dashAutoDPS">0.0</span></div>
+  <div><span class="label">Wave HP:</span> <span class="value" id="dashWaveHP">0</span></div>
   <div><span class="label">Accuracy:</span> <span class="value" id="dashAcc">0%</span></div>
   <div style="margin-top:6px;border-top:1px solid rgba(120,160,220,0.2);padding-top:6px;">
     <div><span class="label">Coins:</span> <span class="value" id="dashCoins">0</span></div>
-    <div><span class="label">DPS/Coin:</span> <span class="value" id="dashDPSCoin">0.000</span></div>
+    <div><span class="label">Regen:</span> <span class="value" id="dashRegen">0.0/s</span></div>
   </div>
 </div>
 <div id="hud"><div class="wave" id="hudWave">WAVE 1</div><div class="coins" id="hudCoins">🪙 0</div><div class="hp" id="hudHp">❤ 100/100</div></div>
@@ -61,8 +62,8 @@
 <div id="stick"><div class="mid"></div><div id="knob"></div></div>
 <div class="overlay show" id="startScreen"><div class="panel"><h1>🏰 Tower Defender 3D</h1><div class="sub">Drag anywhere along the bottom to sweep your turret left & right.<br>Enemies advance from the distance — hold the line.</div><button class="btn" id="startBtn">START</button></div></div>
 <div class="overlay" id="pauseScreen"><div class="panel"><h1>⏸ PAUSED</h1><div class="sub">Game paused. Resume when ready.</div><button class="btn" id="resumeBtn">RESUME</button></div></div>
-<div class="overlay" id="waveSummaryScreen"><div class="panel"><h1>📊 Wave Summary & Next Wave Projection</h1><div style="font-family:'Courier New',monospace;font-size:11px;line-height:1.9;color:#c0d0e8;margin-bottom:16px"><div style="background:rgba(20,30,50,0.5);padding:10px;border-radius:6px;margin-bottom:10px"><div style="color:#8aa0c8;margin-bottom:6px">⚔️ This Wave Analysis</div><div>DPS: <span style="color:#7fffb0;font-weight:bold" id="sumDPS">0.0</span> | Enemy HP: <span style="color:#ff7a6a;font-weight:bold" id="sumEnemyHP">0</span> | Accuracy: <span style="color:#7fffb0;font-weight:bold" id="sumAcc">0%</span></div><div>Your Effective Damage: <span style="color:#7fffb0" id="sumEffective">0</span> vs <span style="color:#ff7a6a" id="sumEnemyHP2">0</span> enemy = <span style="color:#ffed4e;font-weight:bold" id="sumBalance">1.0x</span> ratio</div></div><div style="background:rgba(20,30,50,0.5);padding:10px;border-radius:6px;margin-bottom:10px"><div style="color:#8aa0c8;margin-bottom:6px">💰 Available Resources</div><div>Coins Earned: <span style="color:#ffed4e;font-weight:bold" id="sumCoinsEarn">0</span></div><div>Total Available: <span style="color:#ffed4e;font-weight:bold" id="sumCoinTotal">0</span></div><div>DPS/Coin (all upgrades): <span style="color:#7fffb0;font-weight:bold" id="sumDPSCoin">0.000</span></div></div><div style="background:rgba(20,30,50,0.5);padding:10px;border-radius:6px"><div style="color:#8aa0c8;margin-bottom:8px">🔮 Next Wave HP Calculation</div><div style="color:#aabbdd;font-size:10px;margin-bottom:6px" id="sumWaveCalc">Calculating...</div><div style="border-top:1px solid rgba(120,160,220,0.3);padding-top:8px"><div>Wave <span id="sumNextWave">2</span> Difficulty Ratio: <span style="color:#ffed4e;font-weight:bold" id="sumNextRatio">1.20</span> (easier)</div><div style="margin-top:4px;color:#7fe0a0">→ Next Wave Enemy HP: <span style="color:#ffed4e;font-weight:bold" id="sumNextEnemyHP">0</span></div></div></div></div><button class="btn" id="continueBtn">CONTINUE TO SHOP</button></div></div>
-<div class="overlay" id="shopScreen"><div class="panel"><h1 id="shopTitle">Wave Cleared!</h1><div class="sub" id="shopSub">Spend coins, then start the next wave.</div><div class="coins">🪙 <span id="shopCoins">0</span></div><div style="text-align:center;color:#6ee08a;font-size:16px;font-weight:700;margin-bottom:16px">❤ <span id="shopHp">100</span>/<span id="shopMaxHp">100</span> HP</div><div class="shop-grid"><div class="shop-col"><h3>⚔️ Offense</h3><div id="offenseUpgrades"></div></div><div class="shop-col"><h3>🛡️ Defense</h3><div id="defenseUpgrades"></div></div></div><button class="btn" id="nextWaveBtn">START WAVE</button></div></div>
+<div class="overlay" id="waveSummaryScreen"><div class="panel"><h1>📊 Wave Summary</h1><div style="font-family:'Courier New',monospace;font-size:12px;line-height:2;color:#c0d0e8;margin-bottom:16px"><div style="background:rgba(20,30,50,0.5);padding:12px;border-radius:8px"><div style="color:#8aa0c8;margin-bottom:8px">⚔️ This Wave</div><div>Player DPS: <span style="color:#7fffb0;font-weight:bold" id="sumDPS">0.0</span></div><div>Enemy HP: <span style="color:#ff7a6a;font-weight:bold" id="sumEnemyHP">0</span></div><div>Your Accuracy: <span style="color:#7fffb0;font-weight:bold" id="sumAcc">0%</span></div><div style="margin-top:6px">Damage Dealt: <span style="color:#7fffb0" id="sumEffective">0</span> / <span style="color:#ff7a6a" id="sumEnemyHP2">0</span> = <span style="color:#ffed4e;font-weight:bold" id="sumBalance">1.0x</span></div></div><div style="background:rgba(20,30,50,0.5);padding:12px;border-radius:8px;margin-top:10px"><div style="color:#8aa0c8;margin-bottom:6px">💰 Rewards</div><div>Coins Earned: <span style="color:#ffed4e;font-weight:bold" id="sumCoinsEarn">0</span></div><div>Total Available: <span style="color:#ffed4e;font-weight:bold" id="sumCoinTotal">0</span></div></div></div><button class="btn" id="continueBtn">CONTINUE TO SHOP</button></div></div>
+<div class="overlay" id="shopScreen"><div class="panel"><h1 id="shopTitle">Wave Cleared!</h1><div class="sub" id="shopSub">Spend coins, then start the next wave.</div><div class="coins">🪙 <span id="shopCoins">0</span></div><div style="text-align:center;color:#6ee08a;font-size:16px;font-weight:700;margin-bottom:16px">❤ <span id="shopHp">100</span>/<span id="shopMaxHp">100</span> HP</div><div class="shop-grid"><div class="shop-col"><h3>⚔️ Offense</h3><div id="offenseUpgrades"></div></div><div class="shop-col"><h3>🛡️ Defense</h3><div id="defenseUpgrades"></div></div></div><div style="margin-top:16px;padding:12px;background:rgba(20,30,50,0.6);border-radius:8px;font-family:'Courier New',monospace;font-size:11px;color:#aabbdd"><div style="color:#8aa0c8;margin-bottom:6px;font-weight:700">📊 Next Wave HP Projection</div><div style="color:#c0d0e8" id="nextWaveCalc">Loading...</div></div><button class="btn" id="nextWaveBtn">START WAVE</button></div></div>
 <div class="overlay" id="gameOverScreen"><div class="panel"><h1>💀 Tower Destroyed</h1><div class="sub" id="gameOverSub">You held out for a while.</div><div class="coins">Best Wave: <span id="bestWave">0</span></div><button class="btn danger" id="restartBtn">TRY AGAIN</button></div></div>
 
 <script type="importmap">
@@ -375,8 +376,9 @@ let mainBulletsFired = 0, mainBulletsHit = 0;
 let waveEnemyHP = 0;
 let lastDiffMultiplier = 1, lastPerformanceRatio = 1, lastCoinsEarned = 0;
 let expectedNextWaveHP = 0, expectedNextDPS = 0;
-let lastWaveAccuracy = 0.4; // Start with conservative estimate for wave 1
-let difficultyRatioTarget = 1.2; // Start easier, will decay toward 1.0
+let lastWaveAccuracy = 0.5; // Wave 1 uses 50% assumed accuracy
+let difficultyRatioTarget = 1.2;
+let nextWaveHPProjection = 0; // Calculated after shopping
 
 // Bullet pool
 const bulletGeo = new THREE.SphereGeometry(0.4, 12, 12);
@@ -561,32 +563,22 @@ function startWave() {
   const playerMainDPS = game.damage * game.fireRate;
   const playerAutoDPS = game.autoTurrets.length * game.autoDamage * game.autoFireRate;
 
-  // Calculate difficulty ratio: decays linearly from 1.2 (wave 1) to 0.8 (wave 10+)
-  // Wave 1: 1.2, Wave 2: 1.2, Wave 3: 1.156, ... Wave 10: 0.8, Wave 11+: 0.8
-  let difficultyRatio = 1.2;
-  if (game.wave >= 10) {
-    difficultyRatio = 0.8;
-  } else if (game.wave > 1) {
-    // Linear decay from 1.2 to 0.8 over waves 1-10
-    // (1.2 - 0.8) / 9 = 0.0444 per wave
-    difficultyRatio = 1.2 - ((game.wave - 1) * 0.4 / 9);
-  }
-  difficultyRatioTarget = difficultyRatio;
+  // Calculate wave HP using simple formula
+  // Wave 1: (33s × (DPS × 50% + Auto DPS)) / 1.2
+  // Wave 2+: (33s × (DPS × Prev Accuracy + Auto DPS + Regen)) / 1.2
 
-  // Calculate enemy HP based on wave number
-  let enemyHP;
+  let waveHP;
   if (game.wave === 1) {
-    // Wave 1: Use fixed 50% accuracy assumption
-    const projectedDPS = playerMainDPS * 0.5 + playerAutoDPS;
-    enemyHP = Math.round((ECONOMY.waveDuration * projectedDPS) / difficultyRatio);
+    // Wave 1: fixed 50% accuracy assumption
+    const effectiveDPS = (playerMainDPS * 0.5) + playerAutoDPS;
+    waveHP = Math.round((ECONOMY.waveDuration * effectiveDPS) / 1.2);
   } else {
-    // Wave 2+: Use previous wave's actual accuracy + projected DPS from coins
-    const dpsPerCoin = calculateDPSPerCoin();
-    const projectedUpgradeDPS = (dpsPerCoin * game.coins);
-    const projectedDPS = (playerMainDPS * lastWaveAccuracy) + playerAutoDPS + projectedUpgradeDPS;
-    enemyHP = Math.round((ECONOMY.waveDuration * projectedDPS) / difficultyRatio);
+    // Wave 2+: use previous wave's actual accuracy + regen
+    const effectiveDPS = (playerMainDPS * lastWaveAccuracy) + playerAutoDPS + game.hpRegen;
+    waveHP = Math.round((ECONOMY.waveDuration * effectiveDPS) / 1.2);
   }
-  expectedNextWaveHP = enemyHP;
+
+  expectedNextWaveHP = waveHP;
   expectedNextDPS = playerMainDPS;
 
   // Spawn enemies
@@ -690,43 +682,24 @@ function upgradeCost(key) {
   return Math.round(u.base * Math.pow(1 + ECONOMY.escalationRate, game.lv[key]));
 }
 
-function calculateDPSPerCoinBreakdown() {
-  // Calculate DPS/Coin: sum of all upgrade DPS gains / sum of all upgrade costs
-  let totalDPSGain = 0, totalCost = 0;
+function calculateNextWaveHP() {
+  // Calculate wave HP for next wave based on current (post-shopping) stats
+  // Wave HP = (33s × (Player DPS × Prev Accuracy + Auto DPS + Regen)) / 1.2
 
-  // Evaluate each upgrade type (5 levels of each)
-  for (let lvl = 0; lvl < 5; lvl++) {
-    // Fire Rate: +25% to fireRate
-    const frCost = Math.round(upgrades.fireRate.base * Math.pow(1 + ECONOMY.escalationRate, lvl));
-    const frDPS = game.damage * game.fireRate * 0.25;
-    totalDPSGain += frDPS;
-    totalCost += frCost;
+  const playerMainDPS = game.damage * game.fireRate;
+  const playerAutoDPS = game.autoTurrets.length * game.autoDamage * game.autoFireRate;
 
-    // Damage: +35% to damage
-    const dmgCost = Math.round(upgrades.damage.base * Math.pow(1 + ECONOMY.escalationRate, lvl));
-    const dmgDPS = game.damage * game.fireRate * 0.35;
-    totalDPSGain += dmgDPS;
-    totalCost += dmgCost;
+  const effectiveDPS = (playerMainDPS * lastWaveAccuracy) + playerAutoDPS + game.hpRegen;
+  const nextWaveHP = Math.round((ECONOMY.waveDuration * effectiveDPS) / 1.2);
 
-    // Pierce: ~10% effective DPS gain
-    const pierceCost = Math.round(upgrades.pierce.base * Math.pow(1 + ECONOMY.escalationRate, lvl));
-    const pierceDPS = game.damage * game.fireRate * 0.10;
-    totalDPSGain += pierceDPS;
-    totalCost += pierceCost;
-
-    // Auto Power: +35% damage & +20% rate for auto turrets
-    const autoPowerCost = Math.round(upgrades.autoPower.base * Math.pow(1 + ECONOMY.escalationRate, lvl));
-    const autoPowerDPS = game.autoDamage * game.autoFireRate * 0.35 * 1.2 * Math.min(game.autoTurrets.length, 4);
-    totalDPSGain += autoPowerDPS;
-    totalCost += autoPowerCost;
-  }
-
-  return [totalDPSGain, totalCost];
-}
-
-function calculateDPSPerCoin() {
-  const [totalDPSGain, totalCost] = calculateDPSPerCoinBreakdown();
-  return totalCost > 0 ? totalDPSGain / totalCost : 0.1;
+  return {
+    playerDPS: playerMainDPS,
+    autoDPS: playerAutoDPS,
+    regen: game.hpRegen,
+    accuracy: lastWaveAccuracy,
+    totalEffectiveDPS: effectiveDPS,
+    waveHP: nextWaveHP
+  };
 }
 
 function addAutoTurret() {
@@ -875,64 +848,42 @@ function updateHUD() {
   hudHp.style.color = f > 0.25 ? '#6ee08a' : '#ff7a7a';
   enemyCount.textContent = '👾 ' + (enemies.length + toSpawn) + ' left';
 
-  // Dashboard - Core metrics only
+  // Dashboard - Simple stats
   const mainDps = game.damage * game.fireRate;
+  const autoDps = game.autoTurrets.length * game.autoDamage * game.autoFireRate;
   const acc = mainBulletsFired > 0 ? Math.round(100 * mainBulletsHit / mainBulletsFired) : 0;
-  const dpsPerCoin = calculateDPSPerCoin();
 
   document.getElementById('dashWaveNum').textContent = game.wave;
   document.getElementById('dashDPS').textContent = mainDps.toFixed(1);
-  document.getElementById('dashEnemyHP').textContent = waveEnemyHP.toFixed(0);
+  document.getElementById('dashAutoDPS').textContent = autoDps.toFixed(1);
+  document.getElementById('dashWaveHP').textContent = waveEnemyHP.toFixed(0);
   document.getElementById('dashAcc').textContent = acc + '%';
   document.getElementById('dashCoins').textContent = game.coins;
-  document.getElementById('dashDPSCoin').textContent = dpsPerCoin.toFixed(3);
+  document.getElementById('dashRegen').textContent = game.hpRegen.toFixed(1) + '/s';
 }
 
 function showWaveSummary(accuracy, totalDps) {
   const mainDps = game.damage * game.fireRate;
   const autoDps = game.autoTurrets.length * game.autoDamage * game.autoFireRate;
-  const [totalDPSGain, totalUpgradeCost] = calculateDPSPerCoinBreakdown();
-  const dpsPerCoin = totalUpgradeCost > 0 ? totalDPSGain / totalUpgradeCost : 0.1;
 
-  // This Wave: Calculate actual difficulty ratio achieved
-  const playerDamageThisWave = mainDps * accuracy * ECONOMY.waveDuration;
-  const autoDamageThisWave = autoDps * ECONOMY.waveDuration;
-  const totalDamageThisWave = playerDamageThisWave + autoDamageThisWave;
-  const difficultyRatioAchieved = totalDamageThisWave / Math.max(1, waveEnemyHP);
+  // Store accuracy for next wave calculation
+  lastWaveAccuracy = accuracy;
 
-  // This Wave Display
+  // This Wave Display - just show the stats
   document.getElementById('sumDPS').textContent = mainDps.toFixed(1);
   document.getElementById('sumEnemyHP').textContent = waveEnemyHP.toFixed(0);
   document.getElementById('sumEnemyHP2').textContent = waveEnemyHP.toFixed(0);
   document.getElementById('sumAcc').textContent = Math.round(accuracy * 100) + '%';
-  document.getElementById('sumEffective').textContent = totalDamageThisWave.toFixed(0);
-  document.getElementById('sumBalance').textContent = difficultyRatioAchieved.toFixed(2) + 'x';
 
-  // Economic State
+  const totalDamageThisWave = (mainDps * accuracy * ECONOMY.waveDuration) + (autoDps * ECONOMY.waveDuration);
+  document.getElementById('sumEffective').textContent = totalDamageThisWave.toFixed(0);
+
+  const ratioAchieved = totalDamageThisWave / Math.max(1, waveEnemyHP);
+  document.getElementById('sumBalance').textContent = ratioAchieved.toFixed(2) + 'x (target 1.2x)';
+
+  // Coins earned
   document.getElementById('sumCoinsEarn').textContent = lastCoinsEarned;
   document.getElementById('sumCoinTotal').textContent = game.coins;
-  document.getElementById('sumDPSCoin').textContent = dpsPerCoin.toFixed(3);
-
-  // Next Wave Calculation - show the math
-  const nextWave = game.wave + 1;
-  let nextDifficultyRatio = 1.2;
-  if (nextWave >= 10) {
-    nextDifficultyRatio = 0.8;
-  } else if (nextWave > 1) {
-    nextDifficultyRatio = 1.2 - ((nextWave - 1) * 0.4 / 9);
-  }
-
-  // Next Wave Enemy HP = (Wave Length × (Player DPS × Prev Accuracy + Auto DPS + Coins/DPS×Coins)) / Ratio
-  const projectedUpgradeDPS = dpsPerCoin * game.coins;
-  const nextWaveNumerator = ECONOMY.waveDuration * ((mainDps * accuracy) + autoDps + projectedUpgradeDPS);
-  const nextWaveEnemyHP = Math.round(nextWaveNumerator / nextDifficultyRatio);
-
-  // Show calculation
-  const calcText = `(${ECONOMY.waveDuration}s × ((${mainDps.toFixed(1)} × ${(accuracy*100).toFixed(0)}%) + ${autoDps.toFixed(1)} + (${dpsPerCoin.toFixed(3)} × ${game.coins}))) / ${nextDifficultyRatio.toFixed(2)}`;
-  document.getElementById('sumWaveCalc').textContent = calcText;
-  document.getElementById('sumNextWave').textContent = nextWave;
-  document.getElementById('sumNextRatio').textContent = nextDifficultyRatio.toFixed(2) + (nextDifficultyRatio > 1.1 ? ' (easier)' : nextDifficultyRatio < 0.9 ? ' (harder)' : ' (stable)');
-  document.getElementById('sumNextEnemyHP').textContent = nextWaveEnemyHP;
 
   show('waveSummaryScreen');
 }
@@ -971,6 +922,12 @@ function showShop() {
   document.getElementById('shopCoins').textContent = game.coins;
   document.getElementById('shopHp').textContent = Math.ceil(game.hp);
   document.getElementById('shopMaxHp').textContent = game.maxHp;
+
+  // Calculate and display next wave HP projection
+  const nextWave = calculateNextWaveHP();
+  const calcText = `Wave ${game.wave + 1} HP = (${ECONOMY.waveDuration}s × ((${nextWave.playerDPS.toFixed(1)} × ${(nextWave.accuracy * 100).toFixed(0)}%) + ${nextWave.autoDPS.toFixed(1)} + ${nextWave.regen.toFixed(1)})) / 1.2<br>= (${ECONOMY.waveDuration}s × ${nextWave.totalEffectiveDPS.toFixed(1)}) / 1.2 = <span style="color:#ffed4e;font-weight:bold">${nextWave.waveHP}</span> HP`;
+  document.getElementById('nextWaveCalc').innerHTML = calcText;
+
   renderUpgrades(); show('shopScreen');
 }
 
