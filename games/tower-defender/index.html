@@ -50,7 +50,7 @@
 <div class="overlay" id="startScreen">
   <div class="panel">
     <h1>🏰 Tower Defender</h1>
-    <div class="sub">Use the <b>horizontal joystick</b> at the bottom to aim & fire the turret.<br>Survive the waves. Spend coins to upgrade between rounds.</div>
+    <div class="sub">Use the <b>horizontal joystick</b> at the bottom to aim & fire upward.<br>Enemies descend from above. Survive the waves. Upgrade between rounds.</div>
     <button class="btn" id="startBtn">START</button>
   </div>
 </div>
@@ -97,13 +97,29 @@
   }
   window.addEventListener('resize', resize);
 
+  // ---- Audio ----
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  function playSound(freq, duration, type='sine', volume=0.1) {
+    if (!freq) return;
+    try {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.type = type; osc.frequency.value = freq;
+      gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+      osc.start(audioCtx.currentTime);
+      osc.stop(audioCtx.currentTime + duration);
+    } catch(e) {}
+  }
+
   // ---- Game State ----
   const State = { START: 0, PLAYING: 1, SHOP: 2, GAMEOVER: 3 };
   let state = State.START;
 
   const game = {
-    wallY: 0,                       // wall position (near bottom)
-    turretX: 0, turretY: 0,        // main turret (below wall, centered)
+    wallY: 0,
+    turretX: 0, turretY: 0,
     coins: 0,
     wave: 0,
     bestWave: 0,
@@ -112,7 +128,7 @@
     fireRate: 2.0,
     damage: 8,
     bulletSpeed: 540,
-    autoTurrets: [],                // {x, y, cooldown}
+    autoTurrets: [],
     autoDamage: 5,
     autoFireRate: 1.0,
     lv: { fireRate:0, damage:0, autoTurret:0, autoPower:0, maxHp:0, regen:0 },
@@ -123,6 +139,7 @@
   let enemies = [];
   let particles = [];
   let floaters = [];
+  let screenShake = 0;
 
   let toSpawn = 0, spawnTimer = 0, spawnInterval = 0.85;
   let waveStartHp = 100;
@@ -131,13 +148,12 @@
   // ---- Horizontal Joystick ----
   const stick = {
     active: false, id: null,
-    baseX: 0, y: 0,
     knobX: 0,
     restX: 0, restY: 0,
-    width: 200, height: 50, deadzone: 0.22,
+    width: 220, height: 50, deadzone: 0.22,
     mag: 0,
   };
-  let aiming = false, aimAngle = Math.PI / 2;  // start pointing up
+  let aimAngle = Math.PI / 2;  // pointing straight up
   let playerCooldown = 0;
 
   // ---- Upgrades ----
@@ -150,7 +166,7 @@
                   apply:()=>{ addAutoTurret(); } },
     autoPower:  { name:'Auto-Turret Power',desc:'+35% auto dmg & rate', base:40, growth:1.55, max:25,
                   apply:()=>{ game.autoDamage*=1.35; game.autoFireRate*=1.20; } },
-    maxHp:      { name:'Max HP',       desc:'+30 max HP (does NOT heal)', base:30, growth:1.45, max:40,
+    maxHp:      { name:'Max HP',       desc:'+30 max HP', base:30, growth:1.45, max:40,
                   apply:()=>{ game.maxHp += 30; } },
     regen:      { name:'HP Regen',     desc:'+1.2 HP/sec', base:45, growth:1.55, max:20,
                   apply:()=>{ game.hpRegen += 1.2; } },
@@ -163,32 +179,20 @@
   }
 
   function addAutoTurret() {
-    game.autoTurrets.push({ x: 0, y: 0, cooldown: 0 });
-    layoutAutoTurrets();
-  }
-
-  function layoutAutoTurrets() {
-    // 2 left, 2 right on the castle wall
     const count = game.autoTurrets.length;
-    const spacing = 80;
-    game.autoTurrets.forEach((t, i) => {
-      if (i < 2) {
-        // left side
-        t.x = game.wallY - 80 - i * spacing;
-        t.y = game.wallY - 20;
-      } else {
-        // right side
-        t.x = W - (game.wallY - 80) + (i - 2) * spacing;
-        t.y = game.wallY - 20;
-      }
-    });
+    let x;
+    if (count === 0) x = game.turretX - 120;
+    else if (count === 1) x = game.turretX + 120;
+    else if (count === 2) x = game.turretX - 240;
+    else x = game.turretX + 240;
+    game.autoTurrets.push({ x, y: game.wallY - 40, cooldown: 0 });
   }
 
   // ---- Flow ----
   function resetGame() {
-    game.wallY = H - 140;
+    game.wallY = H * 0.65;
     game.turretX = W / 2;
-    game.turretY = game.wallY + 50;
+    game.turretY = game.wallY + 70;
     game.coins = 0; game.wave = 0;
     game.maxHp = 100; game.hp = 100; game.hpRegen = 0;
     game.fireRate = 2.0; game.damage = 8; game.bulletSpeed = 540;
@@ -201,9 +205,9 @@
   function startGame() { resetGame(); hideAll(); startWave(); }
 
   function startWave() {
-    game.wallY = H - 140;
+    game.wallY = H * 0.65;
     game.turretX = W / 2;
-    game.turretY = game.wallY + 50;
+    game.turretY = game.wallY + 70;
     game.wave++;
     game.bestWave = Math.max(game.bestWave, game.wave);
     toSpawn = Math.round(5 + game.wave * 1.5 + (game.diff - 1) * 4);
@@ -218,7 +222,7 @@
 
   function endWave() {
     const gap = Math.max(0, waveClosestGap === Infinity ? 400 : waveClosestGap);
-    const proximityDanger = 1 - Math.min(1, gap / 220);
+    const proximityDanger = 1 - Math.min(1, gap / 180);
     const hpLostFrac = Math.max(0, (waveStartHp - game.hp)) / game.maxHp;
     const threat = Math.max(proximityDanger, hpLostFrac * 1.2);
 
@@ -229,32 +233,34 @@
     game.diff = Math.max(0.8, Math.min(game.diff, 6));
 
     game.coins += 8 + game.wave * 3;
+    playSound(523, 0.2, 'sine', 0.2); // C5
+    playSound(659, 0.2, 'sine', 0.2); // E5
     state = State.SHOP;
     showShop();
   }
 
   function damageTower(amount) {
     game.hp -= amount;
+    screenShake = 0.15;
+    playSound(200, 0.1, 'sine', 0.15);
     if (game.hp <= 0) { game.hp = 0; gameOver(); }
   }
 
   function gameOver() {
     state = State.GAMEOVER;
-    aiming = false; stick.active = false; stick.id = null;
+    stick.active = false; stick.id = null;
+    playSound(100, 0.5, 'sine', 0.2);
     document.getElementById('bestWave').textContent = game.bestWave;
     document.getElementById('gameOverSub').textContent =
-      `You reached Wave ${game.wave}. The horde grew relentless.`;
+      `You reached Wave ${game.wave}. The horde overwhelmed you.`;
     show('gameOverScreen');
   }
 
   // ---- Enemy Spawning ----
   function spawnEnemy() {
-    const edge = Math.floor(Math.random() * 4);
-    let x, y;
-    if (edge === 0) { x = Math.random()*W; y = -30; }
-    else if (edge === 1) { x = W+30; y = Math.random()*H; }
-    else if (edge === 2) { x = Math.random()*W; y = H+30; }
-    else { x = -30; y = Math.random()*H; }
+    // spawn from top, random x position
+    const x = Math.random() * W;
+    const y = -30;
 
     const w = game.wave, d = game.diff;
     let type = 'grunt';
@@ -264,11 +270,11 @@
 
     let hp, speed, r, reward, color;
     if (type === 'tank') {
-      hp = (34 + w*9) * d; speed = 26 + w*1.0; r = 22; reward = 7 + Math.floor(w*0.7); color = '#c0563f';
+      hp = (34 + w*9) * d; speed = 80 + w*4; r = 24; reward = 7 + Math.floor(w*0.7); color = '#d4553d';
     } else if (type === 'fast') {
-      hp = (8 + w*3) * d; speed = 66 + w*2.5; r = 11; reward = 4 + Math.floor(w*0.4); color = '#5ad6e0';
+      hp = (8 + w*3) * d; speed = 140 + w*6; r = 12; reward = 4 + Math.floor(w*0.4); color = '#00d9ff';
     } else {
-      hp = (12 + w*4) * d; speed = 40 + w*1.6; r = 15; reward = 3 + Math.floor(w*0.4); color = '#9b8cff';
+      hp = (12 + w*4) * d; speed = 90 + w*5; r = 16; reward = 3 + Math.floor(w*0.4); color = '#a78bff';
     }
     enemies.push({ x, y, hp, maxHp:hp, speed, r, reward, type, color, hitFlash:0 });
   }
@@ -276,9 +282,10 @@
   // ---- Firing ----
   function fireFromPlayer() {
     const c = Math.cos(aimAngle), s = Math.sin(aimAngle);
-    const mx = game.turretX + c*24, my = game.turretY + s*24;
+    const mx = game.turretX + c*20, my = game.turretY + s*20;
     bullets.push({ x:mx, y:my, vx:c*game.bulletSpeed, vy:s*game.bulletSpeed, dmg:game.damage, r:5, color:'#ffe27a', life:2 });
     spawnMuzzle(mx, my, c, s);
+    playSound(800, 0.08, 'sine', 0.12);
   }
 
   function fireAutoTurret(t) {
@@ -296,18 +303,18 @@
 
   // ---- Particles ----
   function spawnHit(x, y, color) {
-    for (let i=0;i<8;i++){ const a=Math.random()*Math.PI*2, s=40+Math.random()*120;
-      particles.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:0.4, maxLife:0.4, color, size:2+Math.random()*2 }); }
+    for (let i=0;i<10;i++){ const a=Math.random()*Math.PI*2, s=50+Math.random()*140;
+      particles.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:0.45, maxLife:0.45, color, size:3+Math.random()*3 }); }
   }
   function spawnDeath(x, y, color) {
-    for (let i=0;i<16;i++){ const a=Math.random()*Math.PI*2, s=60+Math.random()*180;
-      particles.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:0.6, maxLife:0.6, color, size:2.5+Math.random()*3.5 }); }
+    for (let i=0;i<20;i++){ const a=Math.random()*Math.PI*2, s=70+Math.random()*220;
+      particles.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:0.7, maxLife:0.7, color, size:3+Math.random()*5 }); }
   }
   function spawnMuzzle(x, y, dx, dy) {
-    for (let i=0;i<5;i++){ const spread=(Math.random()-0.5)*0.7, a=Math.atan2(dy,dx)+spread, s=100+Math.random()*140;
-      particles.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:0.2, maxLife:0.2, color:'#ffd75e', size:2.5 }); }
+    for (let i=0;i<6;i++){ const spread=(Math.random()-0.5)*0.8, a=Math.atan2(dy,dx)+spread, s=120+Math.random()*160;
+      particles.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:0.22, maxLife:0.22, color:'#ffd75e', size:3 }); }
   }
-  function addFloater(x,y,text,color){ floaters.push({x,y,text,life:0.8,color}); }
+  function addFloater(x,y,text,color){ floaters.push({x,y,text,life:0.9,color}); }
 
   // ---- Update ----
   function update(dt) {
@@ -322,7 +329,7 @@
     }
 
     playerCooldown -= dt;
-    if (aiming && playerCooldown <= 0) { fireFromPlayer(); playerCooldown = 1 / game.fireRate; }
+    if (playerCooldown <= 0) { fireFromPlayer(); playerCooldown = 1 / game.fireRate; }
 
     for (const t of game.autoTurrets) {
       t.cooldown -= dt;
@@ -340,7 +347,9 @@
           bullets.splice(i,1);
           if (e.hp <= 0){
             game.coins += e.reward; addFloater(e.x, e.y, '+'+e.reward, '#ffd75e');
-            spawnDeath(e.x, e.y, e.color); enemies.splice(j,1);
+            spawnDeath(e.x, e.y, e.color);
+            playSound(1200, 0.12, 'sine', 0.15);
+            enemies.splice(j,1);
           }
           break;
         }
@@ -349,198 +358,241 @@
 
     for (let j=enemies.length-1;j>=0;j--){
       const e = enemies[j];
-      const dx = game.turretX - e.x, dy = game.turretY - e.y;
+      const dx = game.turretX - e.x, dy = game.wallY - e.y;
       const dist = Math.hypot(dx, dy) || 1;
-      const gap = dist - 30 - e.r;  // 30 = turret radius
+      const gap = dist - 30 - e.r;
       if (gap < waveClosestGap) waveClosestGap = gap;
-      if (dist > 30 + e.r - 4) {
-        e.x += dx/dist * e.speed * dt; e.y += dy/dist * e.speed * dt;
+      if (e.y < game.wallY) {
+        e.y += e.speed * dt;
       } else {
         damageTower(5 + game.wave * 0.5 + (e.type==='tank'?8:0));
-        spawnDeath(e.x, e.y, e.color); enemies.splice(j,1);
+        spawnDeath(e.x, e.y, e.color);
+        enemies.splice(j,1);
       }
       if (e.hitFlash>0) e.hitFlash -= dt;
     }
 
     for (let i=particles.length-1;i>=0;i--){
       const p = particles[i];
-      p.x += p.vx*dt; p.y += p.vy*dt; p.vx*=0.92; p.vy*=0.92; p.life-=dt;
+      p.x += p.vx*dt; p.y += p.vy*dt; p.vx*=0.91; p.vy*=0.91; p.life-=dt;
       if (p.life<=0) particles.splice(i,1);
     }
     for (let i=floaters.length-1;i>=0;i--){
-      const f = floaters[i]; f.y -= 30*dt; f.life -= dt;
+      const f = floaters[i]; f.y -= 35*dt; f.life -= dt;
       if (f.life<=0) floaters.splice(i,1);
     }
 
+    screenShake -= dt;
     if (toSpawn === 0 && enemies.length === 0 && state === State.PLAYING) endWave();
   }
 
   // ---- Render ----
   function draw() {
     ctx.clearRect(0,0,W,H);
-    // starfield background
-    ctx.fillStyle = '#0a0e1a'; ctx.fillRect(0,0,W,H);
-    ctx.globalAlpha = 0.6;
-    for (let i=0; i<30; i++) {
+    // background with gradient
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, '#0a0e1a');
+    grad.addColorStop(0.5, '#0f1425');
+    grad.addColorStop(1, '#0d0f18');
+    ctx.fillStyle = grad; ctx.fillRect(0,0,W,H);
+
+    // starfield
+    ctx.globalAlpha = 0.7;
+    for (let i=0; i<40; i++) {
       const sx = (i*723) % W, sy = (i*197) % H;
-      ctx.fillStyle = i%2===0 ? 'rgba(100,150,200,0.3)' : 'rgba(80,120,180,0.2)';
-      ctx.fillRect(sx, sy, 1, 1);
+      ctx.fillStyle = i%3===0 ? 'rgba(150,180,255,0.4)' : 'rgba(100,150,220,0.3)';
+      ctx.fillRect(sx, sy, 1.5, 1.5);
     }
     ctx.globalAlpha = 1;
-    ctx.strokeStyle = 'rgba(40,55,90,0.15)'; ctx.lineWidth = 1;
-    const g = 50; ctx.beginPath();
+
+    // grid
+    ctx.strokeStyle = 'rgba(50,75,120,0.15)'; ctx.lineWidth = 1;
+    const g = 60; ctx.beginPath();
     for (let x=0;x<W;x+=g){ ctx.moveTo(x,0); ctx.lineTo(x,H); }
     for (let y=0;y<H;y+=g){ ctx.moveTo(0,y); ctx.lineTo(W,y); }
     ctx.stroke();
 
     if (state === State.START) return;
 
-    // draw tower structure (wall + main turret + auto turrets)
-    drawTower();
+    // screen shake
+    let shakeX = 0, shakeY = 0;
+    if (screenShake > 0) {
+      shakeX = (Math.random() - 0.5) * 6;
+      shakeY = (Math.random() - 0.5) * 4;
+    }
+    ctx.save(); ctx.translate(shakeX, shakeY);
 
     // enemies
     for (const e of enemies){
       ctx.beginPath(); ctx.arc(e.x,e.y,e.r,0,Math.PI*2);
-      ctx.fillStyle = e.hitFlash>0 ? '#ffffff' : e.color; ctx.fill();
-      ctx.lineWidth=2; ctx.strokeStyle='rgba(0,0,0,0.5)'; ctx.stroke();
+      ctx.fillStyle = e.hitFlash>0 ? '#ffffff' : e.color;
+      ctx.fill();
+      ctx.lineWidth=2.5; ctx.strokeStyle='rgba(0,0,0,0.6)'; ctx.stroke();
       // hp bar
       if (e.hp < e.maxHp){
         const bw = e.r*2, f = Math.max(0,e.hp/e.maxHp);
-        ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(e.x-e.r, e.y-e.r-8, bw, 4);
-        ctx.fillStyle='#ff5e5e'; ctx.fillRect(e.x-e.r, e.y-e.r-8, bw*f, 4);
+        ctx.fillStyle='rgba(0,0,0,0.7)'; ctx.fillRect(e.x-e.r, e.y-e.r-10, bw, 5);
+        ctx.fillStyle='#ff6b6b'; ctx.fillRect(e.x-e.r, e.y-e.r-10, bw*f, 5);
       }
     }
 
-    // bullets
+    // bullets with glow
     for (const b of bullets){
-      ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2);
-      ctx.fillStyle=b.color; ctx.fill();
-      // glow
-      ctx.globalAlpha = 0.3;
-      ctx.beginPath(); ctx.arc(b.x,b.y,b.r*2.5,0,Math.PI*2);
+      ctx.globalAlpha = 0.4;
+      ctx.beginPath(); ctx.arc(b.x,b.y,b.r*3,0,Math.PI*2);
       ctx.fillStyle=b.color; ctx.fill();
       ctx.globalAlpha = 1;
+      ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2);
+      ctx.fillStyle=b.color; ctx.fill();
     }
 
     // particles
     for (const p of particles){
-      ctx.globalAlpha = Math.max(0, p.life/p.maxLife);
+      ctx.globalAlpha = Math.max(0, p.life/p.maxLife * 0.8);
       ctx.fillStyle = p.color;
-      ctx.fillRect(p.x-p.size/2, p.y-p.size/2, p.size, p.size);
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.size/2, 0, Math.PI*2);
+      ctx.fill();
     }
     ctx.globalAlpha = 1;
 
     // floaters
-    ctx.font = 'bold 18px system-ui, Arial';
+    ctx.font = 'bold 20px system-ui, Arial';
     ctx.textAlign = 'center';
     for (const f of floaters){
-      ctx.globalAlpha = Math.max(0, f.life/0.8);
-      ctx.fillStyle = f.color; ctx.fillText(f.text, f.x, f.y);
+      ctx.globalAlpha = Math.max(0, f.life/0.9);
+      ctx.fillStyle = f.color;
+      ctx.shadowColor = 'rgba(0,0,0,0.8)';
+      ctx.shadowBlur = 6;
+      ctx.fillText(f.text, f.x, f.y);
+      ctx.shadowBlur = 0;
     }
     ctx.globalAlpha = 1; ctx.textAlign = 'start';
+
+    // draw tower
+    drawTower();
 
     // horizontal joystick
     if (state === State.PLAYING) drawStick();
 
+    ctx.restore();
+
     // HUD
     ctx.fillStyle = '#e8eef7';
-    ctx.font = 'bold 18px system-ui, Arial';
-    ctx.fillText('Wave ' + game.wave, 16, 30);
+    ctx.font = 'bold 20px system-ui, Arial';
+    ctx.fillText('Wave ' + game.wave, 16, 34);
     ctx.fillStyle = '#ffd75e';
-    ctx.fillText('🪙 ' + game.coins, 16, 54);
+    ctx.fillText('🪙 ' + game.coins, 16, 60);
     const hpFrac = game.hp/game.maxHp;
-    ctx.fillStyle = hpFrac>0.25?'#7fe0a0':'#ef4444';
-    ctx.fillText('❤ ' + Math.ceil(game.hp) + '/' + game.maxHp, 16, 78);
+    ctx.fillStyle = hpFrac>0.25?'#5ad67a':'#ff6b6b';
+    ctx.fillText('❤ ' + Math.ceil(game.hp) + '/' + game.maxHp, 16, 86);
     ctx.fillStyle = '#8aa0c8';
     ctx.textAlign = 'right';
-    ctx.fillText('Enemies: ' + (enemies.length + toSpawn), W-16, 30);
+    ctx.fillText('Enemies: ' + (enemies.length + toSpawn), W-16, 34);
     ctx.textAlign = 'start';
   }
 
   function drawTower() {
     const hpFrac = game.hp/game.maxHp;
 
-    // castle wall (horizontal bar across screen)
-    ctx.fillStyle = '#3d4d66';
-    ctx.fillRect(0, game.wallY, W, 40);
-    // wall crenellations
-    ctx.fillStyle = '#2a3a52';
-    for (let i=0; i<Math.floor(W/30); i++) {
-      const wx = i*30;
-      ctx.fillRect(wx, game.wallY - 12, 15, 12);
+    // castle wall (horizontal line with thickness)
+    ctx.fillStyle = '#4a6fa5';
+    ctx.fillRect(0, game.wallY - 3, W, 6);
+    ctx.strokeStyle = '#7ba8d9';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(0, game.wallY - 3, W, 6);
+
+    // wall decorations (crenellations)
+    ctx.fillStyle = '#5a7fb5';
+    for (let i=0; i<Math.floor(W/40); i++) {
+      ctx.fillRect(i*40+10, game.wallY - 16, 12, 13);
     }
-    // wall outline
-    ctx.lineWidth = 2; ctx.strokeStyle = '#6b8ab8';
-    ctx.strokeRect(0, game.wallY, W, 40);
 
-    // HP bar (horizontal, below wall)
-    const barH = 6;
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.fillRect(0, game.wallY + 42, W, barH);
-    ctx.fillStyle = hpFrac>0.5?'#5ad67a':(hpFrac>0.25?'#ffd75e':'#ef4444');
-    ctx.fillRect(0, game.wallY + 42, W * hpFrac, barH);
-    ctx.lineWidth = 1; ctx.strokeStyle = '#6b8ab8';
-    ctx.strokeRect(0, game.wallY + 42, W, barH);
+    // HP bar (horizontal below wall)
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(0, game.wallY + 12, W, 8);
+    ctx.fillStyle = hpFrac>0.5?'#5ad67a':(hpFrac>0.25?'#ffd75e':'#ff6b6b');
+    ctx.fillRect(0, game.wallY + 12, W * hpFrac, 8);
+    ctx.lineWidth = 2; ctx.strokeStyle = '#7ba8d9';
+    ctx.strokeRect(0, game.wallY + 12, W, 8);
 
-    // main turret (centered below wall)
-    const tw = 40, th = 50;
-    ctx.fillStyle = '#e8a13e';
+    // main turret (below wall, centered, rectangular)
+    const tw = 48, th = 60;
+    ctx.fillStyle = '#d4a747';
     ctx.fillRect(game.turretX - tw/2, game.turretY - th, tw, th);
-    ctx.lineWidth = 2; ctx.strokeStyle = '#fff2c4';
+    ctx.lineWidth = 2.5; ctx.strokeStyle = '#fff7d1';
     ctx.strokeRect(game.turretX - tw/2, game.turretY - th, tw, th);
 
-    // main turret barrel
+    // turret details
+    ctx.fillStyle = '#a68540';
+    ctx.fillRect(game.turretX - tw/2 + 4, game.turretY - th + 4, tw - 8, 16);
+
+    // main turret barrel (aiming upward, can rotate left/right)
     ctx.save(); ctx.translate(game.turretX, game.turretY - th/2);
-    ctx.rotate(aimAngle);
-    ctx.fillStyle = aiming ? '#ffe27a' : '#ffd75e';
-    ctx.fillRect(0, -4, 32, 8);
+    ctx.rotate(aimAngle - Math.PI/2);
+    ctx.fillStyle = '#ffd75e';
+    ctx.fillRect(-3, 0, 6, 42);
+    ctx.fillStyle = '#ffe27a';
+    ctx.fillRect(-2, 35, 4, 8);
     ctx.restore();
 
     // auto turrets on wall
     for (const t of game.autoTurrets){
-      ctx.fillStyle = '#2f7f55';
-      ctx.fillRect(t.x - 12, t.y - 12, 24, 24);
+      // turret base
+      ctx.fillStyle = '#4a7a5a';
+      ctx.fillRect(t.x - 16, t.y - 16, 32, 32);
       ctx.lineWidth = 2; ctx.strokeStyle = '#7fe0a0';
-      ctx.strokeRect(t.x - 12, t.y - 12, 24, 24);
+      ctx.strokeRect(t.x - 16, t.y - 16, 32, 32);
 
-      // turret barrel (point toward enemies or center)
-      let angle = 0;
+      // turret barrel (point up)
+      let angle = -Math.PI / 2;
       let best = null, bestD = Infinity;
       for (const e of enemies) {
         const d = (e.x-t.x)**2 + (e.y-t.y)**2;
         if (d < bestD) { bestD = d; best = e; }
       }
-      if (best) angle = Math.atan2(best.y - t.y, best.x - t.x);
+      if (best) {
+        const dx = best.x - t.x, dy = best.y - t.y;
+        angle = Math.atan2(dy, dx);
+      }
       ctx.save(); ctx.translate(t.x, t.y);
       ctx.rotate(angle);
       ctx.fillStyle = '#5ad6a0';
-      ctx.fillRect(2, -3, 14, 6);
+      ctx.fillRect(1, -2, 16, 4);
       ctx.restore();
     }
   }
 
   function drawStick() {
     stick.restX = W / 2 - stick.width / 2;
-    stick.restY = H - 60;
+    stick.restY = H - 65;
 
     const bx = stick.restX;
     const by = stick.restY;
-    const kx = stick.active ? stick.knobX : stick.restX + stick.width / 2;
-    const ky = stick.restY;
+    const kx = stick.knobX;
+    const ky = stick.restY + stick.height / 2;
 
     // base
-    ctx.globalAlpha = stick.active ? 0.55 : 0.3;
+    ctx.globalAlpha = stick.active ? 0.6 : 0.35;
     ctx.fillStyle = '#1d2740';
     ctx.fillRect(bx, by, stick.width, stick.height);
-    ctx.lineWidth = 2.5; ctx.strokeStyle = '#3b5a9c';
+    ctx.lineWidth = 3; ctx.strokeStyle = '#4a7fa5';
     ctx.strokeRect(bx, by, stick.width, stick.height);
 
-    // knob (horizontal slider)
-    ctx.globalAlpha = stick.active ? 1 : 0.6;
+    // knob
+    ctx.globalAlpha = stick.active ? 1 : 0.65;
     ctx.fillStyle = '#3b82f6';
-    ctx.fillRect(kx - 20, ky + stick.height/2 - 15, 40, 30);
+    ctx.fillRect(kx - 24, ky - 18, 48, 36);
     ctx.lineWidth = 2.5; ctx.strokeStyle = '#60a5fa';
-    ctx.strokeRect(kx - 20, ky + stick.height/2 - 15, 40, 30);
+    ctx.strokeRect(kx - 24, ky - 18, 48, 36);
+
+    // direction hint
+    ctx.globalAlpha = stick.active ? 0.4 : 0.15;
+    ctx.strokeStyle = '#60a5fa';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(bx + stick.width/4, by + stick.height/2);
+    ctx.lineTo(bx + stick.width*0.75, by + stick.height/2);
+    ctx.stroke();
+
     ctx.globalAlpha = 1;
   }
 
@@ -553,14 +605,13 @@
     requestAnimationFrame(loop);
   }
 
-  // ---- Input (horizontal joystick) ----
+  // ---- Input ----
   function getTouchById(e, id) {
     for (const t of e.changedTouches) if (t.identifier === id) return t;
     return null;
   }
   function startStick(x, y, id) {
     stick.active = true; stick.id = id;
-    stick.baseX = stick.restX;
     updateStick(x);
   }
   function updateStick(x) {
@@ -569,15 +620,17 @@
     const maxTravel = stick.width / 2;
     if (Math.abs(dx) > maxTravel) dx = Math.sign(dx) * maxTravel;
     stick.knobX = stick.restX + stick.width / 2 + dx;
-    stick.mag = Math.min(1, Math.abs(dx) / maxTravel);
-    if (stick.mag > stick.deadzone) {
-      // MIRRORED: left (negative dx) = right angle, right (positive dx) = left angle
-      aimAngle = Math.PI / 2 - (dx / maxTravel) * Math.PI * 0.5;
-      aiming = true;
-    } else { aiming = false; }
+    const mag = Math.min(1, Math.abs(dx) / maxTravel);
+    stick.mag = mag;
+    if (mag > stick.deadzone) {
+      // aim up to ±45 degrees from vertical
+      // left (negative) = left fire, right (positive) = right fire
+      aimAngle = Math.PI / 2 + (dx / maxTravel) * (Math.PI * 0.4);
+    }
   }
   function endStick() {
-    stick.active = false; stick.id = null; aiming = false;
+    stick.active = false; stick.id = null;
+    aimAngle = Math.PI / 2;  // reset to straight up
   }
 
   function onTouchStart(e) {
@@ -604,7 +657,6 @@
   canvas.addEventListener('touchend', onTouchEnd);
   canvas.addEventListener('touchcancel', onTouchEnd);
 
-  // mouse fallback
   canvas.addEventListener('mousedown', e => { if (state===State.PLAYING) startStick(e.clientX, e.clientY, 'mouse'); });
   canvas.addEventListener('mousemove', e => { if (stick.active) updateStick(e.clientX); });
   window.addEventListener('mouseup', () => { if (stick.active) endStick(); });
