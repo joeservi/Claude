@@ -8,81 +8,30 @@
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0e1a; touch-action: none; }
   #game { display: block; width: 100vw; height: 100vh; }
-  .overlay {
-    position: fixed; inset: 0; display: none; flex-direction: column;
-    align-items: center; justify-content: center;
-    background: rgba(5, 8, 18, 0.85); color: #e8eef7;
-    font-family: -apple-system, system-ui, Arial, sans-serif; padding: 20px;
-  }
+  .overlay { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; background: rgba(5, 8, 18, 0.85); color: #e8eef7; font-family: -apple-system, system-ui, Arial, sans-serif; padding: 20px; }
   .overlay.show { display: flex; }
-  .panel {
-    background: #141b30; border: 1px solid #2a3a5c; border-radius: 16px;
-    padding: 20px; width: 100%; max-width: 460px; max-height: 88vh; overflow-y: auto;
-    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
-  }
+  .panel { background: #141b30; border: 1px solid #2a3a5c; border-radius: 16px; padding: 20px; width: 100%; max-width: 460px; max-height: 88vh; overflow-y: auto; box-shadow: 0 12px 40px rgba(0,0,0,0.5); }
   .panel h1 { font-size: 26px; text-align: center; margin-bottom: 4px; }
   .panel .sub { text-align: center; color: #8aa0c8; margin-bottom: 16px; font-size: 14px; }
-  .coins { text-align: center; font-size: 20px; color: #ffd75e; font-weight: bold; margin-bottom: 16px; }
+  .coins { text-align: center; font-size: 20px; color: #ffed4e; font-weight: bold; margin-bottom: 16px; }
   .shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
   .shop-col h3 { font-size: 14px; color: #8aa0c8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; text-align: center; }
-  .up {
-    width: 100%; text-align: left; padding: 10px 12px; margin-bottom: 8px;
-    background: #1d2740; border: 1px solid #2a3a5c; border-radius: 10px;
-    color: #e8eef7; cursor: pointer; transition: 0.12s; font-size: 13px;
-  }
+  .up { width: 100%; text-align: left; padding: 10px 12px; margin-bottom: 8px; background: #1d2740; border: 1px solid #2a3a5c; border-radius: 10px; color: #e8eef7; cursor: pointer; transition: 0.12s; font-size: 13px; }
   .up:active { transform: scale(0.97); }
   .up:disabled { opacity: 0.4; cursor: not-allowed; }
   .up .name { font-weight: bold; display: block; }
   .up .lvl { color: #7fe0a0; font-size: 11px; }
-  .up .cost { color: #ffd75e; float: right; font-weight: bold; }
-  .btn {
-    width: 100%; padding: 15px; border: none; border-radius: 12px;
-    background: linear-gradient(135deg, #3b82f6, #6366f1); color: white;
-    font-size: 18px; font-weight: bold; cursor: pointer; margin-top: 4px;
-  }
+  .up .cost { color: #ffed4e; float: right; font-weight: bold; }
+  .btn { width: 100%; padding: 15px; border: none; border-radius: 12px; background: linear-gradient(135deg, #3b82f6, #6366f1); color: white; font-size: 18px; font-weight: bold; cursor: pointer; margin-top: 4px; }
   .btn:active { transform: scale(0.98); }
   .btn.danger { background: linear-gradient(135deg, #ef4444, #b91c1c); }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
-
-<div class="overlay" id="startScreen">
-  <div class="panel">
-    <h1>🏰 Tower Defender</h1>
-    <div class="sub">Use the <b>horizontal joystick</b> at the bottom to aim & fire upward.<br>Enemies descend from above. Survive the waves. Upgrade between rounds.</div>
-    <button class="btn" id="startBtn">START</button>
-  </div>
-</div>
-
-<div class="overlay" id="shopScreen">
-  <div class="panel">
-    <h1 id="shopTitle">Wave Cleared!</h1>
-    <div class="sub" id="shopSub">Spend coins, then start the next wave.</div>
-    <div class="coins">🪙 <span id="shopCoins">0</span></div>
-    <div class="shop-grid">
-      <div class="shop-col">
-        <h3>⚔️ Offense</h3>
-        <div id="offenseUpgrades"></div>
-      </div>
-      <div class="shop-col">
-        <h3>🛡️ Defense</h3>
-        <div id="defenseUpgrades"></div>
-      </div>
-    </div>
-    <button class="btn" id="nextWaveBtn">START WAVE</button>
-  </div>
-</div>
-
-<div class="overlay" id="gameOverScreen">
-  <div class="panel">
-    <h1>💀 Tower Destroyed</h1>
-    <div class="sub" id="gameOverSub">You survived the onslaught for a while.</div>
-    <div class="coins">Best Wave: <span id="bestWave">0</span></div>
-    <button class="btn danger" id="restartBtn">TRY AGAIN</button>
-  </div>
-</div>
-
+<div class="overlay" id="startScreen"><div class="panel"><h1>🏰 Tower Defender</h1><div class="sub">Use the joystick at the bottom to aim & fire upward.<br>Enemies descend from above. Survive the waves.</div><button class="btn" id="startBtn">START</button></div></div>
+<div class="overlay" id="shopScreen"><div class="panel"><h1 id="shopTitle">Wave Cleared!</h1><div class="sub" id="shopSub">Spend coins, then start the next wave.</div><div class="coins">🪙 <span id="shopCoins">0</span></div><div class="shop-grid"><div class="shop-col"><h3>⚔️ Offense</h3><div id="offenseUpgrades"></div></div><div class="shop-col"><h3>🛡️ Defense</h3><div id="defenseUpgrades"></div></div></div><button class="btn" id="nextWaveBtn">START WAVE</button></div></div>
+<div class="overlay" id="gameOverScreen"><div class="panel"><h1>💀 Tower Destroyed</h1><div class="sub" id="gameOverSub">You survived the onslaught for a while.</div><div class="coins">Best Wave: <span id="bestWave">0</span></div><button class="btn danger" id="restartBtn">TRY AGAIN</button></div></div>
 <script>
 (() => {
   const canvas = document.getElementById('game');
@@ -97,7 +46,6 @@
   }
   window.addEventListener('resize', resize);
 
-  // ---- Audio ----
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   function playSound(freq, duration, type='sine', volume=0.1) {
     if (!freq) return;
@@ -149,7 +97,7 @@
     knobX: 0,
     restX: 0, restY: 0,
     centerX: 0,
-    width: 240, height: 55, deadzone: 0.15,
+    width: 0, height: 50, deadzone: 0.15,
   };
   let aimAngle = -Math.PI / 2;
   let playerCooldown = 0;
@@ -163,7 +111,7 @@
                   apply:()=>{ game.fireRate *= 1.25; } },
     damage:     { name:'Turret Damage',desc:'+35% turret damage', base:26, growth:1.5, max:30,
                   apply:()=>{ game.damage *= 1.35; } },
-    autoTurret: { name:'Build Auto-Turret',desc:'Adds an auto-turret', base:55, growth:1.75, max:4,
+    autoTurret: { name:'Build Auto-Turret',desc:'Adds an auto-turret', base:60, growth:2.2, max:4,
                   apply:()=>{ addAutoTurret(); } },
     autoPower:  { name:'Auto-Turret Power',desc:'+35% auto dmg & rate', base:40, growth:1.55, max:25,
                   apply:()=>{ game.autoDamage*=1.35; game.autoFireRate*=1.20; } },
@@ -176,26 +124,30 @@
   function upgradeCost(key) {
     const u = upgrades[key];
     if (u.repair) return Math.round(18 * (1 + game.wave * 0.22));
+    if (key === 'autoTurret') {
+      const count = game.autoTurrets.length;
+      return Math.round(u.base * Math.pow(u.growth, count));
+    }
     return Math.round(u.base * Math.pow(u.growth, game.lv[key]));
   }
 
   function addAutoTurret() {
     const slots = [
-      { x: game.turretX - 110, y: game.wallY - 30 },  // left-up
-      { x: game.turretX - 110, y: game.wallY + 10 },  // left-down
-      { x: game.turretX + 110, y: game.wallY - 30 },  // right-up
-      { x: game.turretX + 110, y: game.wallY + 10 },  // right-down
+      { x: game.turretX - 220, y: game.turretY },
+      { x: game.turretX - 110, y: game.turretY },
+      { x: game.turretX + 110, y: game.turretY },
+      { x: game.turretX + 220, y: game.turretY },
     ];
     const count = game.autoTurrets.length;
     if (count < slots.length) {
-      game.autoTurrets.push({ ...slots[count], cooldown: 0 });
+      game.autoTurrets.push({ ...slots[count], cooldown: 0, leadTime: 0.15 });
     }
   }
 
   function resetGame() {
-    game.wallY = H - 195;
+    game.wallY = H - 150;
     game.turretX = W / 2;
-    game.turretY = game.wallY + 60;
+    game.turretY = game.wallY + 44;
     game.coins = 0; game.wave = 0;
     game.maxHp = 100; game.hp = 100; game.hpRegen = 0;
     game.fireRate = 2.0; game.damage = 8; game.bulletSpeed = 540;
@@ -208,9 +160,9 @@
   function startGame() { resetGame(); hideAll(); startWave(); }
 
   function startWave() {
-    game.wallY = H - 195;
+    game.wallY = H - 150;
     game.turretX = W / 2;
-    game.turretY = game.wallY + 60;
+    game.turretY = game.wallY + 44;
     game.wave++;
     game.bestWave = Math.max(game.bestWave, game.wave);
     toSpawn = Math.round(5 + game.wave * 1.5 + (game.diff - 1) * 4);
@@ -228,13 +180,11 @@
     const proximityDanger = 1 - Math.min(1, gap / 180);
     const hpLostFrac = Math.max(0, (waveStartHp - game.hp)) / game.maxHp;
     const threat = Math.max(proximityDanger, hpLostFrac * 1.2);
-
     if (threat < 0.20) game.diff *= 1.15;
     else if (threat < 0.40) game.diff *= 1.08;
     else if (threat < 0.65) game.diff *= 1.02;
     else game.diff *= 0.95;
     game.diff = Math.max(0.8, Math.min(game.diff, 6));
-
     game.coins += 8 + game.wave * 3;
     playSound(523, 0.2, 'sine', 0.2);
     playSound(659, 0.2, 'sine', 0.2);
@@ -254,15 +204,13 @@
     stick.active = false; stick.id = null;
     playSound(100, 0.5, 'sine', 0.2);
     document.getElementById('bestWave').textContent = game.bestWave;
-    document.getElementById('gameOverSub').textContent =
-      `You reached Wave ${game.wave}. The horde overwhelmed you.`;
+    document.getElementById('gameOverSub').textContent = `You reached Wave ${game.wave}. The horde overwhelmed you.`;
     show('gameOverScreen');
   }
 
   function spawnEnemy() {
-    const x = Math.random() * W;
+    const x = 60 + Math.random() * (W - 120);
     const y = -40;
-
     const w = game.wave, d = game.diff;
     let type = 'grunt';
     const roll = Math.random();
@@ -271,14 +219,11 @@
 
     let hp, speed, r, reward, color;
     if (type === 'tank') {
-      hp = (34 + w*9) * d; speed = 50 + w*2.5; r = 26; reward = 7 + Math.floor(w*0.7);
-      color = '#ff3d2e';
+      hp = (34 + w*9) * d; speed = 50 + w*2.5; r = 26; reward = 7 + Math.floor(w*0.7); color = '#ff3d2e';
     } else if (type === 'fast') {
-      hp = (8 + w*3) * d; speed = 90 + w*4; r = 13; reward = 4 + Math.floor(w*0.4);
-      color = '#00e5ff';
+      hp = (8 + w*3) * d; speed = 90 + w*4; r = 13; reward = 4 + Math.floor(w*0.4); color = '#00e5ff';
     } else {
-      hp = (12 + w*4) * d; speed = 60 + w*3; r = 17; reward = 3 + Math.floor(w*0.4);
-      color = '#b89eff';
+      hp = (12 + w*4) * d; speed = 60 + w*3; r = 17; reward = 3 + Math.floor(w*0.4); color = '#b89eff';
     }
     enemies.push({ x, y, hp, maxHp:hp, speed, r, reward, type, color, hitFlash:0 });
   }
@@ -299,7 +244,10 @@
       if (d < bestD) { bestD = d; best = e; }
     }
     if (!best) return false;
-    const dx = best.x - t.x, dy = best.y - t.y;
+    // LEAD: predict where enemy will be after leadTime
+    const leadX = best.x + best.speed * Math.cos(0) * t.leadTime;
+    const leadY = best.y + best.speed * t.leadTime;
+    const dx = leadX - t.x, dy = leadY - t.y;
     const len = Math.hypot(dx, dy) || 1;
     bullets.push({ x:t.x, y:t.y, vx:dx/len*460, vy:dy/len*460, dmg:game.autoDamage, r:4, color:'#66ff99', life:2 });
     return true;
@@ -321,23 +269,14 @@
 
   function update(dt) {
     if (state !== State.PLAYING) return;
-
-    if (game.hpRegen > 0 && game.hp < game.maxHp)
-      game.hp = Math.min(game.maxHp, game.hp + game.hpRegen * dt);
-
-    if (toSpawn > 0) {
-      spawnTimer -= dt;
-      if (spawnTimer <= 0) { spawnEnemy(); toSpawn--; spawnTimer = spawnInterval; }
-    }
-
+    if (game.hpRegen > 0 && game.hp < game.maxHp) game.hp = Math.min(game.maxHp, game.hp + game.hpRegen * dt);
+    if (toSpawn > 0) { spawnTimer -= dt; if (spawnTimer <= 0) { spawnEnemy(); toSpawn--; spawnTimer = spawnInterval; } }
     playerCooldown -= dt;
     if (playerCooldown <= 0) { fireFromPlayer(); playerCooldown = 1 / game.fireRate; }
-
     for (const t of game.autoTurrets) {
       t.cooldown -= dt;
       if (t.cooldown <= 0) t.cooldown = fireAutoTurret(t) ? 1/game.autoFireRate : 0.1;
     }
-
     for (let i=bullets.length-1;i>=0;i--){
       const b = bullets[i];
       b.x += b.vx*dt; b.y += b.vy*dt; b.life -= dt;
@@ -357,7 +296,6 @@
         }
       }
     }
-
     for (let j=enemies.length-1;j>=0;j--){
       const e = enemies[j];
       const dx = game.turretX - e.x, dy = game.wallY - e.y;
@@ -373,7 +311,6 @@
       }
       if (e.hitFlash>0) e.hitFlash -= dt;
     }
-
     for (let i=particles.length-1;i>=0;i--){
       const p = particles[i];
       p.x += p.vx*dt; p.y += p.vy*dt; p.vx*=0.91; p.vy*=0.91; p.life-=dt;
@@ -383,7 +320,6 @@
       const f = floaters[i]; f.y -= 35*dt; f.life -= dt;
       if (f.life<=0) floaters.splice(i,1);
     }
-
     screenShake -= dt;
     if (toSpawn === 0 && enemies.length === 0 && state === State.PLAYING) endWave();
   }
@@ -396,7 +332,6 @@
     grad.addColorStop(1, '#0d0a12');
     ctx.fillStyle = grad; ctx.fillRect(0,0,W,H);
 
-    // dense starfield
     ctx.globalAlpha = 0.9;
     for (let i=0; i<80; i++) {
       const sx = (i*723 + i*i*17) % W, sy = (i*197 + i*i*41) % H;
@@ -405,7 +340,6 @@
       ctx.fillRect(sx, sy, sz, sz);
     }
     ctx.globalAlpha = 1;
-
     ctx.strokeStyle = 'rgba(80,120,180,0.1)'; ctx.lineWidth = 1;
     const g = 80; ctx.beginPath();
     for (let x=0;x<W;x+=g){ ctx.moveTo(x,0); ctx.lineTo(x,H); }
@@ -421,7 +355,6 @@
     }
     ctx.save(); ctx.translate(shakeX, shakeY);
 
-    // draw enemies with detail
     for (const e of enemies){
       ctx.save();
       if (e.hitFlash > 0) {
@@ -430,21 +363,17 @@
         ctx.beginPath(); ctx.arc(e.x,e.y,e.r,0,Math.PI*2); ctx.fill();
       }
       ctx.globalAlpha = 1;
-      // main body - glow
       ctx.globalAlpha = 0.3;
       ctx.fillStyle = e.color;
       ctx.beginPath(); ctx.arc(e.x,e.y,e.r+6,0,Math.PI*2); ctx.fill();
       ctx.globalAlpha = 1;
-      // body
       ctx.fillStyle = e.color;
       ctx.beginPath(); ctx.arc(e.x,e.y,e.r,0,Math.PI*2); ctx.fill();
       ctx.lineWidth=2.5; ctx.strokeStyle='rgba(255,255,255,0.4)'; ctx.stroke();
-      // eye
       ctx.fillStyle = '#fff';
       ctx.beginPath(); ctx.arc(e.x-e.r*0.3, e.y-e.r*0.3, e.r*0.3, 0, Math.PI*2); ctx.fill();
       ctx.fillStyle = '#000';
       ctx.beginPath(); ctx.arc(e.x-e.r*0.3, e.y-e.r*0.3, e.r*0.15, 0, Math.PI*2); ctx.fill();
-      // HP bar
       if (e.hp < e.maxHp){
         const bw = e.r*2.6, f = Math.max(0,e.hp/e.maxHp);
         ctx.fillStyle='rgba(0,0,0,0.9)'; ctx.fillRect(e.x-bw/2, e.y-e.r-15, bw, 8);
@@ -454,7 +383,6 @@
       ctx.restore();
     }
 
-    // bullets with glow
     for (const b of bullets){
       ctx.globalAlpha = 0.6;
       ctx.beginPath(); ctx.arc(b.x,b.y,b.r*4,0,Math.PI*2);
@@ -465,7 +393,6 @@
       ctx.lineWidth=1.5; ctx.strokeStyle='rgba(255,255,255,0.5)'; ctx.stroke();
     }
 
-    // particles
     for (const p of particles){
       ctx.globalAlpha = Math.max(0, p.life/p.maxLife * 0.95);
       ctx.fillStyle = p.color;
@@ -474,7 +401,6 @@
     }
     ctx.globalAlpha = 1;
 
-    // floaters
     ctx.font = 'bold 26px system-ui, Arial';
     ctx.textAlign = 'center';
     for (const f of floaters){
@@ -487,9 +413,7 @@
     }
     ctx.globalAlpha = 1; ctx.textAlign = 'start';
 
-    // tower
     drawTower();
-
     if (state === State.PLAYING) drawStick();
 
     ctx.restore();
@@ -510,8 +434,6 @@
 
   function drawTower() {
     const hpFrac = game.hp/game.maxHp;
-
-    // stone wall blocks
     ctx.fillStyle = '#5a7595';
     ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 12;
     ctx.fillRect(0, game.wallY - 5, W, 10);
@@ -523,15 +445,13 @@
     ctx.lineWidth = 3; ctx.strokeStyle = '#8ab0d6';
     ctx.strokeRect(0, game.wallY - 5, W, 10);
 
-    // HP bar
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(0, game.wallY + 8, W, 9);
+    ctx.fillRect(0, game.wallY + 6, W, 8);
     ctx.fillStyle = hpFrac>0.5?'#4ade80':(hpFrac>0.25?'#ffed4e':'#ff3d2e');
-    ctx.fillRect(0, game.wallY + 8, W * hpFrac, 9);
+    ctx.fillRect(0, game.wallY + 6, W * hpFrac, 8);
     ctx.lineWidth = 2; ctx.strokeStyle = '#8ab0d6';
-    ctx.strokeRect(0, game.wallY + 8, W, 9);
+    ctx.strokeRect(0, game.wallY + 6, W, 8);
 
-    // main turret - better design
     const tw = 60, th = TURRET_H;
     ctx.fillStyle = '#d4a747';
     ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 14;
@@ -539,13 +459,10 @@
     ctx.shadowBlur = 0;
     ctx.lineWidth = 3; ctx.strokeStyle = '#fff9d6';
     ctx.strokeRect(game.turretX - tw/2, game.turretY - th, tw, th);
-
-    // turret detail bands
     ctx.fillStyle = '#b8922f';
     ctx.fillRect(game.turretX - tw/2, game.turretY - th + 8, tw, 14);
     ctx.fillRect(game.turretX - tw/2, game.turretY - th + 28, tw, 12);
 
-    // aim arrow - extends to screen edge
     const p = turretPivot();
     const c = Math.cos(aimAngle), s = Math.sin(aimAngle);
     const rayDist = Math.max(W, H) * 2;
@@ -554,7 +471,6 @@
     ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(arrowEndX, arrowEndY); ctx.stroke();
     ctx.setLineDash([]);
 
-    // barrel
     ctx.lineCap = 'round';
     ctx.lineWidth = 13; ctx.strokeStyle = '#9a7a35'; ctx.globalAlpha = 0.5;
     ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + c*BARREL_LEN, p.y + s*BARREL_LEN); ctx.stroke();
@@ -562,20 +478,17 @@
     ctx.lineWidth = 8; ctx.strokeStyle = '#ffed4e';
     ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + c*BARREL_LEN, p.y + s*BARREL_LEN); ctx.stroke();
 
-    // muzzle
     const mx = p.x + c*BARREL_LEN, my = p.y + s*BARREL_LEN;
     ctx.globalAlpha = playerCooldown < 0.08 ? 0.9 : 0.5;
     ctx.beginPath(); ctx.arc(mx, my, 7, 0, Math.PI*2);
     ctx.fillStyle = playerCooldown < 0.08 ? '#ffff99' : '#ffed4e'; ctx.fill();
     ctx.globalAlpha = 1;
 
-    // hub
     ctx.beginPath(); ctx.arc(p.x, p.y, 12, 0, Math.PI*2);
     ctx.fillStyle = '#a68540'; ctx.fill();
     ctx.lineWidth = 2; ctx.strokeStyle = '#fff9d6'; ctx.stroke();
     ctx.lineCap = 'butt';
 
-    // auto turrets on wall (4 positions)
     for (const t of game.autoTurrets){
       ctx.fillStyle = '#4a7a5a';
       ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 10;
@@ -591,7 +504,9 @@
         if (d < bestD) { bestD = d; best = e; }
       }
       if (best) {
-        const dx = best.x - t.x, dy = best.y - t.y;
+        const leadX = best.x + best.speed * Math.cos(0) * 0.15;
+        const leadY = best.y + best.speed * 0.15;
+        const dx = leadX - t.x, dy = leadY - t.y;
         angle = Math.atan2(dy, dx);
       }
       ctx.save(); ctx.translate(t.x, t.y);
@@ -604,11 +519,12 @@
   }
 
   function drawStick() {
-    stick.restX = W / 2 - stick.width / 2;
-    stick.restY = H - 60;
-    stick.centerX = stick.restX + stick.width / 2;
+    stick.width = W;
+    stick.restX = 0;
+    stick.restY = H - 50;
+    stick.centerX = W / 2;
 
-    const bx = stick.restX;
+    const bx = 0;
     const by = stick.restY;
     const kx = stick.active ? stick.knobX : stick.centerX;
     const ky = stick.restY + stick.height / 2;
@@ -624,10 +540,10 @@
     ctx.globalAlpha = stick.active ? 1 : 0.75;
     ctx.fillStyle = '#3b82f6';
     ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 10;
-    ctx.fillRect(kx - 30, ky - 22, 60, 44);
+    ctx.fillRect(kx - 35, ky - 22, 70, 44);
     ctx.shadowBlur = 0;
     ctx.lineWidth = 2.5; ctx.strokeStyle = '#60a5fa';
-    ctx.strokeRect(kx - 30, ky - 22, 60, 44);
+    ctx.strokeRect(kx - 35, ky - 22, 70, 44);
     ctx.globalAlpha = 1;
   }
 
@@ -648,14 +564,13 @@
     updateStick(x);
   }
   function updateStick(x) {
-    stick.restX = W / 2 - stick.width / 2;
-    stick.centerX = stick.restX + stick.width / 2;
+    stick.width = W;
+    stick.centerX = W / 2;
     let dx = x - stick.centerX;
     const maxTravel = stick.width / 2;
     if (Math.abs(dx) > maxTravel) dx = Math.sign(dx) * maxTravel;
     stick.knobX = stick.centerX + dx;
     const t = dx / maxTravel;
-    // ALWAYS update aim angle, even if small movement. Centered (t=0) = straight up
     aimAngle = -Math.PI / 2 - t * MAX_TILT;
   }
   function endStick() {
@@ -703,10 +618,12 @@
 
   function renderUpgrades() {
     const offense = ['fireRate','damage'];
-    if (game.autoTurrets.length > 0) {
+    if (game.autoTurrets.length > 0 && game.autoTurrets.length < 4) {
       offense.push('autoTurret','autoPower');
-    } else {
+    } else if (game.autoTurrets.length === 0) {
       offense.push('autoTurret');
+    } else {
+      offense.push('autoPower');
     }
     const defense = ['maxHp','regen','repair'];
     const offEl = document.getElementById('offenseUpgrades');
@@ -721,13 +638,14 @@
       const maxed = !isRepair && !isBuild && lvl >= u.max;
       const cantAfford = game.coins < cost;
       const repairFull = isRepair && game.hp >= game.maxHp;
+      const allAutoBuilt = isBuild && game.autoTurrets.length >= 4;
 
       if (key === 'autoPower' && game.autoTurrets.length === 0) return;
 
       const btn = document.createElement('button');
       btn.className = 'up';
-      btn.disabled = maxed || cantAfford || repairFull;
-      const right = maxed ? 'MAX' : (repairFull ? 'FULL' : '🪙'+cost);
+      btn.disabled = maxed || cantAfford || repairFull || allAutoBuilt;
+      const right = maxed ? 'MAX' : (repairFull ? 'FULL' : (allAutoBuilt ? '✓ ALL' : '🪙'+cost));
       let lvlLine;
       if (isRepair) {
         lvlLine = `<span class="lvl">${Math.ceil(game.hp)}/${game.maxHp} HP</span>`;
@@ -747,7 +665,7 @@
           if (game.hp >= game.maxHp) return;
           game.coins -= c; game.hp = Math.min(game.maxHp, game.hp + u.healAmount);
         } else {
-          if (isBuild && game.autoTurrets.length >= u.max) return;
+          if (isBuild && game.autoTurrets.length >= 4) return;
           if (!isBuild && game.lv[key] >= u.max) return;
           game.coins -= c;
           if (isBuild) u.apply();
