@@ -145,19 +145,19 @@
   let waveStartHp = 100;
   let waveClosestGap = Infinity;
 
-  // ---- Horizontal Joystick ----
+  // ---- Horizontal Joystick (CENTERED AT REST) ----
   const stick = {
     active: false, id: null,
     knobX: 0,
     restX: 0, restY: 0,
-    width: 220, height: 50, deadzone: 0.22,
-    mag: 0,
+    centerX: 0,
+    width: 240, height: 60, deadzone: 0.22,
   };
-  let aimAngle = -Math.PI / 2;  // straight up (canvas: up = negative Y)
+  let aimAngle = -Math.PI / 2;
   let playerCooldown = 0;
-  const TURRET_H = 60;          // turret box height
-  const BARREL_LEN = 42;        // barrel length (muzzle distance from pivot)
-  const MAX_TILT = 1.35;        // max aim tilt from vertical (~77°)
+  const TURRET_H = 50;
+  const BARREL_LEN = 38;
+  const MAX_TILT = 1.35;
   function turretPivot() { return { x: game.turretX, y: game.turretY - TURRET_H }; }
 
   // ---- Upgrades ----
@@ -185,18 +185,18 @@
   function addAutoTurret() {
     const count = game.autoTurrets.length;
     let x;
-    if (count === 0) x = game.turretX - 120;
-    else if (count === 1) x = game.turretX + 120;
-    else if (count === 2) x = game.turretX - 240;
-    else x = game.turretX + 240;
-    game.autoTurrets.push({ x, y: game.wallY - 40, cooldown: 0 });
+    if (count === 0) x = game.turretX - 100;
+    else if (count === 1) x = game.turretX + 100;
+    else if (count === 2) x = game.turretX - 200;
+    else x = game.turretX + 200;
+    game.autoTurrets.push({ x, y: game.wallY - 28, cooldown: 0 });
   }
 
   // ---- Flow ----
   function resetGame() {
-    game.wallY = H * 0.65;
+    game.wallY = H - 200;
     game.turretX = W / 2;
-    game.turretY = game.wallY + 70;
+    game.turretY = game.wallY + 64;
     game.coins = 0; game.wave = 0;
     game.maxHp = 100; game.hp = 100; game.hpRegen = 0;
     game.fireRate = 2.0; game.damage = 8; game.bulletSpeed = 540;
@@ -209,9 +209,9 @@
   function startGame() { resetGame(); hideAll(); startWave(); }
 
   function startWave() {
-    game.wallY = H * 0.65;
+    game.wallY = H - 200;
     game.turretX = W / 2;
-    game.turretY = game.wallY + 70;
+    game.turretY = game.wallY + 64;
     game.wave++;
     game.bestWave = Math.max(game.bestWave, game.wave);
     toSpawn = Math.round(5 + game.wave * 1.5 + (game.diff - 1) * 4);
@@ -237,8 +237,8 @@
     game.diff = Math.max(0.8, Math.min(game.diff, 6));
 
     game.coins += 8 + game.wave * 3;
-    playSound(523, 0.2, 'sine', 0.2); // C5
-    playSound(659, 0.2, 'sine', 0.2); // E5
+    playSound(523, 0.2, 'sine', 0.2);
+    playSound(659, 0.2, 'sine', 0.2);
     state = State.SHOP;
     showShop();
   }
@@ -262,9 +262,8 @@
 
   // ---- Enemy Spawning ----
   function spawnEnemy() {
-    // spawn from top, random x position
     const x = Math.random() * W;
-    const y = -30;
+    const y = -40;
 
     const w = game.wave, d = game.diff;
     let type = 'grunt';
@@ -272,22 +271,24 @@
     if (w >= 5 && roll < 0.15) type = 'tank';
     else if (w >= 3 && roll < 0.40) type = 'fast';
 
-    let hp, speed, r, reward, color;
+    let hp, speed, r, reward, color, shape;
     if (type === 'tank') {
-      hp = (34 + w*9) * d; speed = 80 + w*4; r = 24; reward = 7 + Math.floor(w*0.7); color = '#d4553d';
+      hp = (34 + w*9) * d; speed = 50 + w*2.5; r = 26; reward = 7 + Math.floor(w*0.7);
+      color = '#e84c3d'; shape = 'square';
     } else if (type === 'fast') {
-      hp = (8 + w*3) * d; speed = 140 + w*6; r = 12; reward = 4 + Math.floor(w*0.4); color = '#00d9ff';
+      hp = (8 + w*3) * d; speed = 90 + w*4; r = 13; reward = 4 + Math.floor(w*0.4);
+      color = '#00e5ff'; shape = 'diamond';
     } else {
-      hp = (12 + w*4) * d; speed = 90 + w*5; r = 16; reward = 3 + Math.floor(w*0.4); color = '#a78bff';
+      hp = (12 + w*4) * d; speed = 60 + w*3; r = 17; reward = 3 + Math.floor(w*0.4);
+      color = '#b89eff'; shape = 'circle';
     }
-    enemies.push({ x, y, hp, maxHp:hp, speed, r, reward, type, color, hitFlash:0 });
+    enemies.push({ x, y, hp, maxHp:hp, speed, r, reward, type, color, hitFlash:0, shape });
   }
 
   // ---- Firing ----
   function fireFromPlayer() {
     const c = Math.cos(aimAngle), s = Math.sin(aimAngle);
     const p = turretPivot();
-    // muzzle at the END of the barrel, not the turret center
     const mx = p.x + c*BARREL_LEN, my = p.y + s*BARREL_LEN;
     bullets.push({ x:mx, y:my, vx:c*game.bulletSpeed, vy:s*game.bulletSpeed, dmg:game.damage, r:5, color:'#ffe27a', life:2 });
     spawnMuzzle(mx, my, c, s);
@@ -397,23 +398,24 @@
     ctx.clearRect(0,0,W,H);
     // background with gradient
     const grad = ctx.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0, '#0a0e1a');
-    grad.addColorStop(0.5, '#0f1425');
-    grad.addColorStop(1, '#0d0f18');
+    grad.addColorStop(0, '#08070d');
+    grad.addColorStop(0.3, '#0c0a14');
+    grad.addColorStop(1, '#0a0810');
     ctx.fillStyle = grad; ctx.fillRect(0,0,W,H);
 
     // starfield
-    ctx.globalAlpha = 0.7;
-    for (let i=0; i<40; i++) {
-      const sx = (i*723) % W, sy = (i*197) % H;
-      ctx.fillStyle = i%3===0 ? 'rgba(150,180,255,0.4)' : 'rgba(100,150,220,0.3)';
-      ctx.fillRect(sx, sy, 1.5, 1.5);
+    ctx.globalAlpha = 0.8;
+    for (let i=0; i<50; i++) {
+      const sx = (i*723 + i*i*17) % W, sy = (i*197 + i*i*41) % H;
+      const sz = (i % 3) + 1;
+      ctx.fillStyle = i%4===0 ? 'rgba(200,220,255,0.6)' : 'rgba(150,180,240,0.4)';
+      ctx.fillRect(sx, sy, sz, sz);
     }
     ctx.globalAlpha = 1;
 
     // grid
-    ctx.strokeStyle = 'rgba(50,75,120,0.15)'; ctx.lineWidth = 1;
-    const g = 60; ctx.beginPath();
+    ctx.strokeStyle = 'rgba(60,100,160,0.12)'; ctx.lineWidth = 1;
+    const g = 70; ctx.beginPath();
     for (let x=0;x<W;x+=g){ ctx.moveTo(x,0); ctx.lineTo(x,H); }
     for (let y=0;y<H;y+=g){ ctx.moveTo(0,y); ctx.lineTo(W,y); }
     ctx.stroke();
@@ -428,33 +430,59 @@
     }
     ctx.save(); ctx.translate(shakeX, shakeY);
 
-    // enemies
+    // enemies with better visuals
     for (const e of enemies){
-      ctx.beginPath(); ctx.arc(e.x,e.y,e.r,0,Math.PI*2);
-      ctx.fillStyle = e.hitFlash>0 ? '#ffffff' : e.color;
-      ctx.fill();
-      ctx.lineWidth=2.5; ctx.strokeStyle='rgba(0,0,0,0.6)'; ctx.stroke();
-      // hp bar
-      if (e.hp < e.maxHp){
-        const bw = e.r*2, f = Math.max(0,e.hp/e.maxHp);
-        ctx.fillStyle='rgba(0,0,0,0.7)'; ctx.fillRect(e.x-e.r, e.y-e.r-10, bw, 5);
-        ctx.fillStyle='#ff6b6b'; ctx.fillRect(e.x-e.r, e.y-e.r-10, bw*f, 5);
+      ctx.save();
+      // hit flash white
+      if (e.hitFlash > 0) {
+        ctx.globalAlpha = e.hitFlash;
+        ctx.fillStyle = '#ffffff';
+        if (e.shape === 'square') ctx.fillRect(e.x-e.r, e.y-e.r, e.r*2, e.r*2);
+        else if (e.shape === 'diamond') {
+          ctx.beginPath(); ctx.moveTo(e.x, e.y-e.r); ctx.lineTo(e.x+e.r, e.y);
+          ctx.lineTo(e.x, e.y+e.r); ctx.lineTo(e.x-e.r, e.y); ctx.closePath(); ctx.fill();
+        }
+        else { ctx.beginPath(); ctx.arc(e.x,e.y,e.r,0,Math.PI*2); ctx.fill(); }
+        ctx.globalAlpha = 1;
       }
+      // main shape
+      if (e.shape === 'square') {
+        ctx.fillStyle = e.color; ctx.fillRect(e.x-e.r, e.y-e.r, e.r*2, e.r*2);
+        ctx.lineWidth=3; ctx.strokeStyle='rgba(255,255,255,0.3)'; ctx.strokeRect(e.x-e.r, e.y-e.r, e.r*2, e.r*2);
+      } else if (e.shape === 'diamond') {
+        ctx.fillStyle = e.color;
+        ctx.beginPath(); ctx.moveTo(e.x, e.y-e.r); ctx.lineTo(e.x+e.r, e.y);
+        ctx.lineTo(e.x, e.y+e.r); ctx.lineTo(e.x-e.r, e.y); ctx.closePath(); ctx.fill();
+        ctx.lineWidth=2.5; ctx.strokeStyle='rgba(255,255,255,0.2)'; ctx.stroke();
+      } else {
+        ctx.beginPath(); ctx.arc(e.x,e.y,e.r,0,Math.PI*2);
+        ctx.fillStyle = e.color; ctx.fill();
+        ctx.lineWidth=3; ctx.strokeStyle='rgba(255,255,255,0.25)'; ctx.stroke();
+      }
+      // HP bar (thick)
+      if (e.hp < e.maxHp){
+        const bw = e.r*2.4, f = Math.max(0,e.hp/e.maxHp);
+        ctx.fillStyle='rgba(0,0,0,0.8)'; ctx.fillRect(e.x-bw/2, e.y-e.r-13, bw, 7);
+        ctx.fillStyle='#ff4444'; ctx.fillRect(e.x-bw/2, e.y-e.r-13, bw*f, 7);
+        ctx.lineWidth=1; ctx.strokeStyle='rgba(255,255,255,0.3)'; ctx.strokeRect(e.x-bw/2, e.y-e.r-13, bw, 7);
+      }
+      ctx.restore();
     }
 
     // bullets with glow
     for (const b of bullets){
-      ctx.globalAlpha = 0.4;
-      ctx.beginPath(); ctx.arc(b.x,b.y,b.r*3,0,Math.PI*2);
+      ctx.globalAlpha = 0.5;
+      ctx.beginPath(); ctx.arc(b.x,b.y,b.r*3.5,0,Math.PI*2);
       ctx.fillStyle=b.color; ctx.fill();
       ctx.globalAlpha = 1;
       ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2);
       ctx.fillStyle=b.color; ctx.fill();
+      ctx.lineWidth=1; ctx.strokeStyle='rgba(255,255,255,0.4)'; ctx.stroke();
     }
 
     // particles
     for (const p of particles){
-      ctx.globalAlpha = Math.max(0, p.life/p.maxLife * 0.8);
+      ctx.globalAlpha = Math.max(0, p.life/p.maxLife * 0.9);
       ctx.fillStyle = p.color;
       ctx.beginPath(); ctx.arc(p.x, p.y, p.size/2, 0, Math.PI*2);
       ctx.fill();
@@ -462,104 +490,118 @@
     ctx.globalAlpha = 1;
 
     // floaters
-    ctx.font = 'bold 20px system-ui, Arial';
+    ctx.font = 'bold 24px system-ui, Arial';
     ctx.textAlign = 'center';
     for (const f of floaters){
       ctx.globalAlpha = Math.max(0, f.life/0.9);
       ctx.fillStyle = f.color;
-      ctx.shadowColor = 'rgba(0,0,0,0.8)';
-      ctx.shadowBlur = 6;
+      ctx.shadowColor = 'rgba(0,0,0,0.9)';
+      ctx.shadowBlur = 8;
       ctx.fillText(f.text, f.x, f.y);
       ctx.shadowBlur = 0;
     }
     ctx.globalAlpha = 1; ctx.textAlign = 'start';
 
-    // draw tower
+    // tower
     drawTower();
 
-    // horizontal joystick
+    // joystick
     if (state === State.PLAYING) drawStick();
 
     ctx.restore();
 
     // HUD
     ctx.fillStyle = '#e8eef7';
-    ctx.font = 'bold 20px system-ui, Arial';
-    ctx.fillText('Wave ' + game.wave, 16, 34);
+    ctx.font = 'bold 22px system-ui, Arial';
+    ctx.fillText('Wave ' + game.wave, 16, 36);
     ctx.fillStyle = '#ffd75e';
-    ctx.fillText('🪙 ' + game.coins, 16, 60);
+    ctx.fillText('🪙 ' + game.coins, 16, 62);
     const hpFrac = game.hp/game.maxHp;
     ctx.fillStyle = hpFrac>0.25?'#5ad67a':'#ff6b6b';
-    ctx.fillText('❤ ' + Math.ceil(game.hp) + '/' + game.maxHp, 16, 86);
+    ctx.fillText('❤ ' + Math.ceil(game.hp) + '/' + game.maxHp, 16, 88);
     ctx.fillStyle = '#8aa0c8';
     ctx.textAlign = 'right';
-    ctx.fillText('Enemies: ' + (enemies.length + toSpawn), W-16, 34);
+    ctx.fillText('Enemies: ' + (enemies.length + toSpawn), W-16, 36);
     ctx.textAlign = 'start';
   }
 
   function drawTower() {
     const hpFrac = game.hp/game.maxHp;
 
-    // castle wall (horizontal line with thickness)
-    ctx.fillStyle = '#4a6fa5';
-    ctx.fillRect(0, game.wallY - 3, W, 6);
-    ctx.strokeStyle = '#7ba8d9';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(0, game.wallY - 3, W, 6);
+    // castle wall (thicker, more detailed)
+    ctx.fillStyle = '#5a7fa5';
+    ctx.fillRect(0, game.wallY - 4, W, 8);
+    ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 10;
+    ctx.lineWidth = 2; ctx.strokeStyle = '#9bc0ff';
+    ctx.strokeRect(0, game.wallY - 4, W, 8);
+    ctx.shadowBlur = 0;
 
-    // wall decorations (crenellations)
-    ctx.fillStyle = '#5a7fb5';
-    for (let i=0; i<Math.floor(W/40); i++) {
-      ctx.fillRect(i*40+10, game.wallY - 16, 12, 13);
+    // wall crenellations (bigger, more visible)
+    ctx.fillStyle = '#4a6f95';
+    for (let i=0; i<Math.floor(W/50); i++) {
+      ctx.fillRect(i*50+15, game.wallY - 20, 16, 16);
     }
 
-    // HP bar (horizontal below wall)
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
-    ctx.fillRect(0, game.wallY + 12, W, 8);
+    // HP bar (thick horizontal bar under wall)
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(0, game.wallY + 6, W, 10);
     ctx.fillStyle = hpFrac>0.5?'#5ad67a':(hpFrac>0.25?'#ffd75e':'#ff6b6b');
-    ctx.fillRect(0, game.wallY + 12, W * hpFrac, 8);
-    ctx.lineWidth = 2; ctx.strokeStyle = '#7ba8d9';
-    ctx.strokeRect(0, game.wallY + 12, W, 8);
+    ctx.fillRect(0, game.wallY + 6, W * hpFrac, 10);
+    ctx.lineWidth = 2; ctx.strokeStyle = '#9bc0ff';
+    ctx.strokeRect(0, game.wallY + 6, W, 10);
 
-    // main turret (below wall, centered, rectangular)
-    const tw = 48, th = 60;
-    ctx.fillStyle = '#d4a747';
+    // main turret base (gold, larger)
+    const tw = 56, th = TURRET_H;
+    ctx.fillStyle = '#e8b923';
+    ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 12;
     ctx.fillRect(game.turretX - tw/2, game.turretY - th, tw, th);
-    ctx.lineWidth = 2.5; ctx.strokeStyle = '#fff7d1';
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = 3; ctx.strokeStyle = '#fff9d6';
     ctx.strokeRect(game.turretX - tw/2, game.turretY - th, tw, th);
 
-    // turret details
-    ctx.fillStyle = '#a68540';
-    ctx.fillRect(game.turretX - tw/2 + 4, game.turretY - th + 4, tw - 8, 16);
+    // turret panel detail
+    ctx.fillStyle = '#c9951a';
+    ctx.fillRect(game.turretX - tw/2 + 6, game.turretY - th + 6, tw - 12, 18);
 
-    // main turret barrel (mounted at turret top, points in aim direction)
+    // aim arrow (long line pointing from turret in aim direction)
     const p = turretPivot();
     const c = Math.cos(aimAngle), s = Math.sin(aimAngle);
+    const arrowLen = 200;
+    const arrowEndX = p.x + c * arrowLen, arrowEndY = p.y + s * arrowLen;
+    ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255, 215, 94, 0.4)'; ctx.setLineDash([6, 4]);
+    ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(arrowEndX, arrowEndY); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // barrel (thick, glowing)
     const mx = p.x + c*BARREL_LEN, my = p.y + s*BARREL_LEN;
-    // barrel as a thick rounded line
     ctx.lineCap = 'round';
-    ctx.lineWidth = 10; ctx.strokeStyle = '#b8902f';
+    ctx.lineWidth = 12; ctx.strokeStyle = '#a68540'; ctx.globalAlpha = 0.6;
     ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(mx, my); ctx.stroke();
-    ctx.lineWidth = 6; ctx.strokeStyle = '#ffd75e';
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 7; ctx.strokeStyle = '#ffd75e';
     ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(mx, my); ctx.stroke();
-    // muzzle tip
-    ctx.beginPath(); ctx.arc(mx, my, 4, 0, Math.PI*2);
-    ctx.fillStyle = playerCooldown < 0.06 ? '#fff7d1' : '#ffe27a'; ctx.fill();
-    ctx.lineCap = 'butt';
+
+    // muzzle tip (glowing)
+    ctx.globalAlpha = playerCooldown < 0.06 ? 0.8 : 0.5;
+    ctx.beginPath(); ctx.arc(mx, my, 6, 0, Math.PI*2);
+    ctx.fillStyle = playerCooldown < 0.06 ? '#ffe27a' : '#ffd75e'; ctx.fill();
+    ctx.globalAlpha = 1;
+
     // pivot hub
-    ctx.beginPath(); ctx.arc(p.x, p.y, 9, 0, Math.PI*2);
+    ctx.beginPath(); ctx.arc(p.x, p.y, 11, 0, Math.PI*2);
     ctx.fillStyle = '#a68540'; ctx.fill();
-    ctx.lineWidth = 2; ctx.strokeStyle = '#fff7d1'; ctx.stroke();
+    ctx.lineWidth = 2; ctx.strokeStyle = '#fff9d6'; ctx.stroke();
+    ctx.lineCap = 'butt';
 
-    // auto turrets on wall
+    // auto turrets
     for (const t of game.autoTurrets){
-      // turret base
       ctx.fillStyle = '#4a7a5a';
-      ctx.fillRect(t.x - 16, t.y - 16, 32, 32);
-      ctx.lineWidth = 2; ctx.strokeStyle = '#7fe0a0';
-      ctx.strokeRect(t.x - 16, t.y - 16, 32, 32);
+      ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 8;
+      ctx.fillRect(t.x - 18, t.y - 18, 36, 36);
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = 2.5; ctx.strokeStyle = '#7fe0a0';
+      ctx.strokeRect(t.x - 18, t.y - 18, 36, 36);
 
-      // turret barrel (point up)
       let angle = -Math.PI / 2;
       let best = null, bestD = Infinity;
       for (const e of enemies) {
@@ -572,43 +614,40 @@
       }
       ctx.save(); ctx.translate(t.x, t.y);
       ctx.rotate(angle);
-      ctx.fillStyle = '#5ad6a0';
-      ctx.fillRect(1, -2, 16, 4);
+      ctx.lineCap = 'round'; ctx.lineWidth = 5; ctx.strokeStyle = '#5ad6a0';
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(18, 0); ctx.stroke();
+      ctx.lineCap = 'butt';
       ctx.restore();
     }
   }
 
   function drawStick() {
     stick.restX = W / 2 - stick.width / 2;
-    stick.restY = H - 65;
+    stick.restY = H - 70;
+    stick.centerX = stick.restX + stick.width / 2;
 
     const bx = stick.restX;
     const by = stick.restY;
-    const kx = stick.knobX;
+    const kx = stick.active ? stick.knobX : stick.centerX;  // CENTER when at rest
     const ky = stick.restY + stick.height / 2;
 
     // base
-    ctx.globalAlpha = stick.active ? 0.6 : 0.35;
+    ctx.globalAlpha = stick.active ? 0.65 : 0.38;
     ctx.fillStyle = '#1d2740';
+    ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 8;
     ctx.fillRect(bx, by, stick.width, stick.height);
+    ctx.shadowBlur = 0;
     ctx.lineWidth = 3; ctx.strokeStyle = '#4a7fa5';
     ctx.strokeRect(bx, by, stick.width, stick.height);
 
-    // knob
-    ctx.globalAlpha = stick.active ? 1 : 0.65;
+    // knob (always centered when not active!)
+    ctx.globalAlpha = stick.active ? 1 : 0.7;
     ctx.fillStyle = '#3b82f6';
-    ctx.fillRect(kx - 24, ky - 18, 48, 36);
+    ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = 8;
+    ctx.fillRect(kx - 28, ky - 20, 56, 40);
+    ctx.shadowBlur = 0;
     ctx.lineWidth = 2.5; ctx.strokeStyle = '#60a5fa';
-    ctx.strokeRect(kx - 24, ky - 18, 48, 36);
-
-    // direction hint
-    ctx.globalAlpha = stick.active ? 0.4 : 0.15;
-    ctx.strokeStyle = '#60a5fa';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(bx + stick.width/4, by + stick.height/2);
-    ctx.lineTo(bx + stick.width*0.75, by + stick.height/2);
-    ctx.stroke();
-
+    ctx.strokeRect(kx - 28, ky - 20, 56, 40);
     ctx.globalAlpha = 1;
   }
 
@@ -632,19 +671,20 @@
   }
   function updateStick(x) {
     stick.restX = W / 2 - stick.width / 2;
-    let dx = x - (stick.restX + stick.width / 2);
+    stick.centerX = stick.restX + stick.width / 2;
+    let dx = x - stick.centerX;
     const maxTravel = stick.width / 2;
     if (Math.abs(dx) > maxTravel) dx = Math.sign(dx) * maxTravel;
-    stick.knobX = stick.restX + stick.width / 2 + dx;
-    const t = dx / maxTravel;   // -1 (full left) .. +1 (full right)
-    stick.mag = Math.abs(t);
-    // Centered = straight up (-PI/2). INVERTED: push right -> aim left,
-    // push left -> aim right. Full push = mostly horizontal, slightly up.
-    aimAngle = -Math.PI / 2 - t * MAX_TILT;
+    stick.knobX = stick.centerX + dx;
+    const t = dx / maxTravel;
+    if (Math.abs(t) > stick.deadzone) {
+      // centered = straight up (-PI/2), inverted: right -> left, left -> right
+      aimAngle = -Math.PI / 2 - t * MAX_TILT;
+    }
   }
   function endStick() {
     stick.active = false; stick.id = null;
-    aimAngle = -Math.PI / 2;  // reset to straight up
+    aimAngle = -Math.PI / 2;
   }
 
   function onTouchStart(e) {
