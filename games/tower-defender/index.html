@@ -153,8 +153,12 @@
     width: 220, height: 50, deadzone: 0.22,
     mag: 0,
   };
-  let aimAngle = Math.PI / 2;  // pointing straight up
+  let aimAngle = -Math.PI / 2;  // straight up (canvas: up = negative Y)
   let playerCooldown = 0;
+  const TURRET_H = 60;          // turret box height
+  const BARREL_LEN = 42;        // barrel length (muzzle distance from pivot)
+  const MAX_TILT = 1.35;        // max aim tilt from vertical (~77°)
+  function turretPivot() { return { x: game.turretX, y: game.turretY - TURRET_H }; }
 
   // ---- Upgrades ----
   const upgrades = {
@@ -282,7 +286,9 @@
   // ---- Firing ----
   function fireFromPlayer() {
     const c = Math.cos(aimAngle), s = Math.sin(aimAngle);
-    const mx = game.turretX + c*20, my = game.turretY + s*20;
+    const p = turretPivot();
+    // muzzle at the END of the barrel, not the turret center
+    const mx = p.x + c*BARREL_LEN, my = p.y + s*BARREL_LEN;
     bullets.push({ x:mx, y:my, vx:c*game.bulletSpeed, vy:s*game.bulletSpeed, dmg:game.damage, r:5, color:'#ffe27a', life:2 });
     spawnMuzzle(mx, my, c, s);
     playSound(800, 0.08, 'sine', 0.12);
@@ -526,14 +532,24 @@
     ctx.fillStyle = '#a68540';
     ctx.fillRect(game.turretX - tw/2 + 4, game.turretY - th + 4, tw - 8, 16);
 
-    // main turret barrel (aiming upward, can rotate left/right)
-    ctx.save(); ctx.translate(game.turretX, game.turretY - th/2);
-    ctx.rotate(aimAngle - Math.PI/2);
-    ctx.fillStyle = '#ffd75e';
-    ctx.fillRect(-3, 0, 6, 42);
-    ctx.fillStyle = '#ffe27a';
-    ctx.fillRect(-2, 35, 4, 8);
-    ctx.restore();
+    // main turret barrel (mounted at turret top, points in aim direction)
+    const p = turretPivot();
+    const c = Math.cos(aimAngle), s = Math.sin(aimAngle);
+    const mx = p.x + c*BARREL_LEN, my = p.y + s*BARREL_LEN;
+    // barrel as a thick rounded line
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 10; ctx.strokeStyle = '#b8902f';
+    ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(mx, my); ctx.stroke();
+    ctx.lineWidth = 6; ctx.strokeStyle = '#ffd75e';
+    ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(mx, my); ctx.stroke();
+    // muzzle tip
+    ctx.beginPath(); ctx.arc(mx, my, 4, 0, Math.PI*2);
+    ctx.fillStyle = playerCooldown < 0.06 ? '#fff7d1' : '#ffe27a'; ctx.fill();
+    ctx.lineCap = 'butt';
+    // pivot hub
+    ctx.beginPath(); ctx.arc(p.x, p.y, 9, 0, Math.PI*2);
+    ctx.fillStyle = '#a68540'; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = '#fff7d1'; ctx.stroke();
 
     // auto turrets on wall
     for (const t of game.autoTurrets){
@@ -620,17 +636,15 @@
     const maxTravel = stick.width / 2;
     if (Math.abs(dx) > maxTravel) dx = Math.sign(dx) * maxTravel;
     stick.knobX = stick.restX + stick.width / 2 + dx;
-    const mag = Math.min(1, Math.abs(dx) / maxTravel);
-    stick.mag = mag;
-    if (mag > stick.deadzone) {
-      // aim up to ±45 degrees from vertical
-      // left (negative) = left fire, right (positive) = right fire
-      aimAngle = Math.PI / 2 + (dx / maxTravel) * (Math.PI * 0.4);
-    }
+    const t = dx / maxTravel;   // -1 (full left) .. +1 (full right)
+    stick.mag = Math.abs(t);
+    // Centered = straight up (-PI/2). INVERTED: push right -> aim left,
+    // push left -> aim right. Full push = mostly horizontal, slightly up.
+    aimAngle = -Math.PI / 2 - t * MAX_TILT;
   }
   function endStick() {
     stick.active = false; stick.id = null;
-    aimAngle = Math.PI / 2;  // reset to straight up
+    aimAngle = -Math.PI / 2;  // reset to straight up
   }
 
   function onTouchStart(e) {
