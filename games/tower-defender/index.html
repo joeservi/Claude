@@ -549,20 +549,29 @@ function getTargetDifficultyRatio(wave) {
   return 1.2 - ((wave - 1) * 0.4 / 9);
 }
 
-function calculateWaveDuration(waveHP, wave) {
-  // Consistent duration calculation used by both startWave and shop projection
-  // Based on: spawn time + travel time for enemies
-  // Estimate queue size from expected average enemy HP
-  spawnInterval = Math.max(0.3, 0.9 - wave * 0.02);
-  const avgEnemyHP = 18; // Typical average (between minHP and maxHP)
-  const estimatedQueueLength = Math.max(3, Math.round(waveHP / avgEnemyHP));
-  const spawnTime = (estimatedQueueLength - 1) * spawnInterval;
+function calculateWaveDurationExact(queue, wave) {
+  // Calculate EXACT wave duration from actual queue composition
+  // Wave duration = max(spawn_time_of_enemy + travel_time_of_enemy) across all enemies
+  if (queue.length === 0) return 0;
 
-  // Travel time: distance 52, with faster speeds each wave
-  const baselineSpeed = 5.0 + wave * 0.35;
-  const travelTime = 52 / baselineSpeed + 2; // +2 second buffer for last enemy
+  const spawnInterval = Math.max(0.3, 0.9 - wave * 0.02);
+  const baseSpeed = 5.0 + wave * 0.35;
 
-  return Math.round(spawnTime + travelTime);
+  let maxCompletionTime = 0;
+
+  for (let i = 0; i < queue.length; i++) {
+    const enemyHP = queue[i];
+    const radius = Math.max(0.9, Math.min(3.4, 0.55 * Math.cbrt(enemyHP)));
+    const enemySpeed = baseSpeed * (1.9 / (radius + 0.7));
+
+    const spawnTime = i * spawnInterval;
+    const travelTime = 52 / enemySpeed;
+    const completionTime = spawnTime + travelTime;
+
+    maxCompletionTime = Math.max(maxCompletionTime, completionTime);
+  }
+
+  return Math.round(maxCompletionTime);
 }
 
 function startWave() {
@@ -579,14 +588,13 @@ function startWave() {
   // Wave 1: accuracy = 50%; Wave 2+: previous wave's accuracy
   const accuracyForCalc = game.wave === 1 ? 0.5 : lastWaveAccuracy;
 
-  // Estimate wave duration
-  let estimatedDuration = calculateWaveDuration(1000, game.wave); // Rough estimate
-
-  // Calculate waveHP using estimated duration
-  let effectiveDamage = estimatedDuration * ((playerMainDPS * accuracyForCalc) + playerAutoDPS + game.hpRegen);
+  // Step 1: Use previous wave's duration as baseline to estimate waveHP
+  // (For wave 1, assume ~25 second baseline)
+  const baselineDuration = game.wave === 1 ? 25 : game.waveDuration;
+  let effectiveDamage = baselineDuration * ((playerMainDPS * accuracyForCalc) + playerAutoDPS + game.hpRegen);
   let waveHP = Math.round(effectiveDamage / targetRatio);
 
-  // Build wave composition: a list of enemy HP values that sum EXACTLY to waveHP
+  // Step 2: Build the actual wave composition
   spawnQueue = buildWaveComposition(waveHP, game.wave);
   spawnIndex = 0;
   toSpawn = spawnQueue.length;
@@ -594,16 +602,14 @@ function startWave() {
   spawnTimer = 0;
   spawnInterval = Math.max(0.3, 0.9 - game.wave * 0.02);
 
-  // Recalculate duration with actual queue
-  const spawnTime = (spawnQueue.length - 1) * spawnInterval;
-  const baselineSpeed = 5.0 + game.wave * 0.35;
-  const travelTime = 52 / baselineSpeed + 2;
-  const calculatedDuration = Math.round(spawnTime + travelTime);
+  // Step 3: Calculate EXACT duration from actual queue
+  const exactDuration = calculateWaveDurationExact(spawnQueue, game.wave);
 
-  // Recalculate waveHP if duration changed significantly
-  effectiveDamage = calculatedDuration * ((playerMainDPS * accuracyForCalc) + playerAutoDPS + game.hpRegen);
+  // Step 4: Recalculate waveHP with exact duration
+  effectiveDamage = exactDuration * ((playerMainDPS * accuracyForCalc) + playerAutoDPS + game.hpRegen);
   const newWaveHP = Math.round(effectiveDamage / targetRatio);
 
+  // Step 5: If waveHP differs significantly, rebuild queue and recalculate duration
   if (Math.abs(newWaveHP - waveHP) > Math.max(5, waveHP * 0.15)) {
     waveHP = newWaveHP;
     spawnQueue = buildWaveComposition(waveHP, game.wave);
@@ -611,8 +617,9 @@ function startWave() {
     toSpawn = spawnQueue.length;
   }
 
-  // Store calculated duration for this wave
-  game.waveDuration = calculatedDuration;
+  // Step 6: Final duration from actual queue
+  const finalDuration = calculateWaveDurationExact(spawnQueue, game.wave);
+  game.waveDuration = finalDuration;
   game.waveTimer = 0;
 
   expectedNextWaveHP = waveHP;
@@ -737,29 +744,47 @@ function upgradeCost(key) {
 }
 
 function calculateNextWaveHP() {
-  // Calculate wave HP for next wave based on current (post-shopping) stats
-  // Effective Damage = Wave Length × (Player DPS × Prev Accuracy + Auto DPS + Regen)
-  // Enemy HP = Effective Damage / Target Difficulty Ratio
+  // Calculate EXACT specs for next wave based on current (post-shopping) stats
+  // Forecast the actual queue, timing, and resulting wave length
   const nextWave = game.wave + 1;
   const targetRatio = getTargetDifficultyRatio(nextWave);
   const playerMainDPS = game.damage * game.fireRate;
   const playerAutoDPS = game.autoTurrets.length * game.autoDamage * game.autoFireRate;
 
-  // Use the same duration calculation as startWave for consistency
-  const estNextWaveDuration = calculateWaveDuration(1000, nextWave); // 1000 is dummy, uses avgEnemyHP estimate
+  // Step 1: Use current wave's duration as baseline
+  const baselineDuration = game.waveDuration;
+  let effectiveDamage = baselineDuration * ((playerMainDPS * lastWaveAccuracy) + playerAutoDPS + game.hpRegen);
+  let nextWaveHP = Math.round(effectiveDamage / targetRatio);
 
-  const effectiveDamage = estNextWaveDuration * ((playerMainDPS * lastWaveAccuracy) + playerAutoDPS + game.hpRegen);
-  const nextWaveHP = Math.round(effectiveDamage / targetRatio);
+  // Step 2: Build the actual queue for next wave
+  const tempQueue = buildWaveComposition(nextWaveHP, nextWave);
+
+  // Step 3: Calculate exact duration from that queue
+  const exactDuration = calculateWaveDurationExact(tempQueue, nextWave);
+
+  // Step 4: Recalculate waveHP with exact duration
+  effectiveDamage = exactDuration * ((playerMainDPS * lastWaveAccuracy) + playerAutoDPS + game.hpRegen);
+  const finalWaveHP = Math.round(effectiveDamage / targetRatio);
+
+  // Step 5: If waveHP changed significantly, rebuild queue once more
+  let finalQueue = tempQueue;
+  if (Math.abs(finalWaveHP - nextWaveHP) > Math.max(5, nextWaveHP * 0.15)) {
+    finalQueue = buildWaveComposition(finalWaveHP, nextWave);
+  }
+
+  // Step 6: Final exact duration
+  const finalDuration = calculateWaveDurationExact(finalQueue, nextWave);
 
   return {
     playerDPS: playerMainDPS,
     autoDPS: playerAutoDPS,
     regen: game.hpRegen,
     accuracy: lastWaveAccuracy,
-    effectiveDamage: effectiveDamage,
+    effectiveDamage: finalDuration * ((playerMainDPS * lastWaveAccuracy) + playerAutoDPS + game.hpRegen),
     targetRatio: targetRatio,
-    waveHP: nextWaveHP,
-    waveDuration: estNextWaveDuration
+    waveHP: finalWaveHP,
+    waveDuration: finalDuration,
+    enemyCount: finalQueue.length
   };
 }
 
