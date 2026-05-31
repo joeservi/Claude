@@ -8,16 +8,23 @@
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: #05060f; touch-action: none; font-family: -apple-system, system-ui, Arial, sans-serif; }
   #c { display: block; width: 100vw; height: 100vh; }
-  #dashboard { position: fixed; top: 8px; left: 10px; z-index: 50; padding: 10px 13px; background: rgba(14,20,38,0.75); border: 1px solid rgba(120,160,220,0.35); border-radius: 10px; backdrop-filter: blur(6px); color: #d0dff0; font-size: 11px; font-weight: 600; line-height: 1.5; font-family: 'Courier New', monospace; pointer-events: none; max-width: 180px; }
-  #dashboard .label { color: #8aa0c8; }
-  #dashboard .value { color: #7fffb0; }
-  #dashboard .danger { color: #ff6b6b; }
-  #hud { position: fixed; top: 8px; right: 12px; z-index: 50; padding: 9px 14px 11px; background: rgba(14,20,38,0.5); border: 1px solid rgba(120,160,220,0.28); border-radius: 13px; backdrop-filter: blur(5px); color: #eaf1ff; min-width: 140px; pointer-events: none; }
-  #hud .wave { font-size: 22px; font-weight: 800; letter-spacing: 0.5px; }
-  #hud .coins { font-size: 17px; font-weight: 700; color: #ffe066; margin-top: 2px; }
-  #hud .hp { font-size: 17px; font-weight: 700; margin-top: 2px; }
-  #enemyCount { position: fixed; top: 12px; right: 14px; z-index: 50; color: #9fb4d8; font-size: 15px; font-weight: 700; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,0.7); }
-  #uiButtons { position: fixed; top: 145px; right: 12px; display: flex; gap: 8px; z-index: 100; }
+  /* Unified top bar: prominent row + stats row, compact against the top */
+  #topbar { position: fixed; top: 0; left: 0; right: 0; z-index: 50; padding: 6px 8px; background: rgba(12,18,34,0.8); border-bottom: 1px solid rgba(120,160,220,0.3); backdrop-filter: blur(6px); color: #eaf1ff; }
+  #topMain { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  #topMain .stat { display: flex; flex-direction: column; align-items: center; line-height: 1.1; flex: 1; }
+  #topMain .stat .lab { font-size: 9px; color: #8aa0c8; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; }
+  #topMain .stat .num { font-size: 17px; font-weight: 800; }
+  #topMain .wave .num { color: #cfe0ff; }
+  #topMain .coins .num { color: #ffe066; }
+  #topMain .hp .num { color: #6ee08a; }
+  #topMain .enemies .num { color: #ff9a6b; }
+  #uiButtons { display: flex; gap: 6px; }
+  .uiBtn2 { width: 36px; height: 36px; border: 1px solid rgba(120,160,220,0.25); border-radius: 9px; background: rgba(30,42,68,0.85); color: #cfe0ff; font-size: 16px; cursor: pointer; pointer-events: auto; }
+  .uiBtn2:active { transform: scale(0.92); }
+  #dashStats { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 5px; padding-top: 5px; border-top: 1px solid rgba(120,160,220,0.18); font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; color: #aabbdd; }
+  #dashStats span.s { white-space: nowrap; }
+  #dashStats .label { color: #8aa0c8; }
+  #dashStats .value { color: #7fffb0; }
   .uiBtn { width: 44px; height: 44px; border: 1px solid rgba(120,160,220,0.25); border-radius: 12px; background: rgba(30,42,68,0.82); color: #cfe0ff; font-size: 19px; cursor: pointer; box-shadow: 0 3px 10px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.12); backdrop-filter: blur(4px); transition: all 0.15s; }
   .uiBtn:active { transform: scale(0.92); }
   #stick { position: fixed; left: 8px; right: 8px; bottom: 14px; height: 48px; z-index: 40; border-radius: 24px; background: linear-gradient(180deg, rgba(22,30,52,0.82), rgba(12,17,32,0.82)); border: 1px solid rgba(90,130,190,0.4); pointer-events: none; overflow: hidden; }
@@ -55,23 +62,27 @@
 </head>
 <body>
 <canvas id="c"></canvas>
-<div id="dashboard">
-  <div style="font-weight:700;margin-bottom:4px;color:#9fb4d8">Wave <span id="dashWaveNum">1</span> · <span id="dashWaveLen">33</span>s · <span id="dashEnemyCount">0</span> 👾</div>
-  <div><span class="label">Player DPS:</span> <span class="value" id="dashDPS">0.0</span></div>
-  <div><span class="label">Accuracy:</span> <span class="value" id="dashAcc">0%</span></div>
-  <div><span class="label">Auto DPS:</span> <span class="value" id="dashAutoDPS">0.0</span></div>
-  <div><span class="label">Regen:</span> <span class="value" id="dashRegen">0.0/s</span></div>
-  <div><span class="label">Eff. Dmg:</span> <span class="value" id="dashEffDmg">0</span></div>
-  <div><span class="label">Wave HP:</span> <span class="value" id="dashWaveHP">0</span></div>
-  <div style="margin-top:6px;border-top:1px solid rgba(120,160,220,0.2);padding-top:6px;">
-    <div><span class="label">Actual Ratio:</span> <span class="value" id="dashActualRatio">0.00</span></div>
-    <div><span class="label">Target Ratio:</span> <span class="value" id="dashTargetRatio">1.20</span></div>
-    <div><span class="label">Coins:</span> <span class="value" id="dashCoins">0</span></div>
+<div id="topbar">
+  <div id="topMain">
+    <div class="stat wave"><span class="lab">Wave</span><span class="num" id="tbWave">1</span></div>
+    <div class="stat"><span class="lab">Time</span><span class="num" id="tbTime">0s</span></div>
+    <div class="stat coins"><span class="lab">Coins</span><span class="num" id="tbCoins">0</span></div>
+    <div class="stat hp"><span class="lab">Health</span><span class="num" id="tbHp">100</span></div>
+    <div class="stat enemies"><span class="lab">Enemies</span><span class="num" id="tbEnemies">0</span></div>
+    <div id="uiButtons"><button class="uiBtn2" id="pauseBtn" title="Pause">⏸</button><button class="uiBtn2" id="soundBtn" title="Sound">🔊</button></div>
+  </div>
+  <div id="dashStats">
+    <span class="s"><span class="label">P.DPS</span> <span class="value" id="dashDPS">0.0</span></span>
+    <span class="s"><span class="label">Acc</span> <span class="value" id="dashAcc">0%</span></span>
+    <span class="s"><span class="label">Auto</span> <span class="value" id="dashAutoDPS">0.0</span></span>
+    <span class="s"><span class="label">Regen</span> <span class="value" id="dashRegen">0.0/s</span></span>
+    <span class="s"><span class="label">EffDmg</span> <span class="value" id="dashEffDmg">0</span></span>
+    <span class="s"><span class="label">WaveHP</span> <span class="value" id="dashWaveHP">0</span></span>
+    <span class="s"><span class="label">WaveLen</span> <span class="value" id="dashWaveLen">0s</span></span>
+    <span class="s"><span class="label">Act.R</span> <span class="value" id="dashActualRatio">0.00</span></span>
+    <span class="s"><span class="label">Tgt.R</span> <span class="value" id="dashTargetRatio">1.20</span></span>
   </div>
 </div>
-<div id="hud"><div class="wave" id="hudWave">WAVE 1</div><div class="coins" id="hudCoins">🪙 0</div><div class="hp" id="hudHp">❤ 100/100</div></div>
-<div id="enemyCount">👾 0 left</div>
-<div id="uiButtons"><button class="uiBtn" id="pauseBtn" title="Pause">⏸</button><button class="uiBtn" id="soundBtn" title="Sound">🔊</button></div>
 <div id="stick"><div class="mid"></div><div id="knob"></div></div>
 <div class="overlay show" id="startScreen"><div class="panel"><h1>🏰 Tower Defender 3D</h1><div class="sub">Drag anywhere along the bottom to sweep your turret left & right.<br>Enemies advance from the distance — hold the line.</div><button class="btn" id="startBtn">START</button></div></div>
 <div class="overlay" id="pauseScreen"><div class="panel"><h1>⏸ PAUSED</h1><div class="sub">Game paused. Resume when ready.</div><button class="btn" id="resumeBtn">RESUME</button></div></div>
@@ -117,14 +128,14 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x1a2a4a);
 scene.fog = new THREE.Fog(0x1a2a4a, 42, 110);
 
-// Angled overview (~35° down from horizontal / forward tilt), looking into the field.
-// Camera sits behind & above the player side; the WALL (Z=0) lands near the BOTTOM
+// Steep angled overview (more overhead, less forward) looking into the field.
+// Camera sits high & above the player side; the WALL (Z=0) lands near the BOTTOM
 // where its width stretches across the screen, and the spawn zone (Z=-52) recedes
-// to the top (narrower from perspective). Tuned so the wall fills the portrait
-// width with a small cushion while the whole battlefield stays in frame.
+// to the top (higher horizon, narrower from perspective). Tuned so the wall fills
+// the portrait width with a small cushion while the whole battlefield stays in frame.
 const camera = new THREE.PerspectiveCamera(74, 1, 0.1, 220);
-camera.position.set(0, 40, 26);
-camera.lookAt(0, 2, -28);
+camera.position.set(0, 52, 18);
+camera.lookAt(0, 2, -32);
 
 let composer, bloom;
 function buildComposer(w, h) {
@@ -473,14 +484,14 @@ function spawnEnemy() {
   const reward = Math.round(baseRewardPerWave / Math.max(1, spawnQueue.length));
 
   // Size proportional to HP: radius scales with cube root so volume ~ HP
-  const r = Math.max(0.9, Math.min(3.4, 0.55 * Math.cbrt(hp)));
+  const r = Math.max(0.9, Math.min(3.6, 0.5 * Math.cbrt(hp)));
 
   // Speed: smaller enemies are faster; speeds increase significantly each wave
   const baseSpeed = 5.0 + game.wave * 0.35;
   const speed = baseSpeed * (1.9 / (r + 0.7));
 
-  // Shape & color tier based on size (more sides as it grows)
-  const tier = r < 1.2 ? 0 : r < 1.6 ? 1 : r < 2.1 ? 2 : r < 2.7 ? 3 : 4;
+  // Shape & color tier based on HP, spaced 0→200 so the most-sided shape is ~200 HP
+  const tier = hp < 30 ? 0 : hp < 70 ? 1 : hp < 110 ? 2 : hp < 160 ? 3 : 4;
   const color =    [0x35c8a0, 0x4a9ae8, 0x8a6ae0, 0xe0902a, 0xd83838][tier];
   const eyeColor = [0x9fffe0, 0x9fd0ff, 0xd8b8ff, 0xffd28a, 0xff8a6a][tier];
 
@@ -603,12 +614,16 @@ function startWave() {
   // Wave 1: accuracy = 50%; Wave 2+: previous wave's accuracy
   const accuracyForCalc = game.wave === 1 ? 0.5 : lastWaveAccuracy;
 
+  // Regen contributes (regen/sec × waveHP / 100) to effective damage, so solving
+  //   waveHP = [duration×(playerDPS×acc + autoDPS) + regen×waveHP/100] / targetRatio
+  // gives waveHP = baseDamage / (targetRatio − regen/100). Clamp denominator > 0.
+  const regenDenom = Math.max(0.1, targetRatio - game.hpRegen / 100);
+
   // Step 1: Use previous wave's duration as baseline to estimate waveHP
   // (For wave 1, assume ~25 second baseline)
   const baselineDuration = game.wave === 1 ? 25 : game.waveDuration;
   const baselineBaseDamage = baselineDuration * ((playerMainDPS * accuracyForCalc) + playerAutoDPS);
-  const baselineRegenFactor = baselineDuration * game.hpRegen / 100;
-  let waveHP = Math.round(baselineBaseDamage / (targetRatio - baselineRegenFactor));
+  let waveHP = Math.round(baselineBaseDamage / regenDenom);
 
   // Step 2: Build the actual wave composition
   spawnQueue = buildWaveComposition(waveHP, game.wave);
@@ -623,8 +638,7 @@ function startWave() {
 
   // Step 4: Recalculate waveHP with exact duration
   const exactBaseDamage = exactDuration * ((playerMainDPS * accuracyForCalc) + playerAutoDPS);
-  const exactRegenFactor = exactDuration * game.hpRegen / 100;
-  const newWaveHP = Math.round(exactBaseDamage / (targetRatio - exactRegenFactor));
+  const newWaveHP = Math.round(exactBaseDamage / regenDenom);
 
   // Step 5: If waveHP differs significantly, rebuild queue and recalculate duration
   if (Math.abs(newWaveHP - waveHP) > Math.max(5, waveHP * 0.15)) {
@@ -650,12 +664,12 @@ function startWave() {
 
 function buildWaveComposition(waveHP, wave) {
   // Produce enemy HP chunks summing exactly to waveHP.
-  // Enemy size increases linearly with wave: avg 20 HP at wave 1, avg 100 HP at wave 10+
+  // Enemy size increases linearly with wave: avg 10 HP at wave 1, avg 200 HP at wave 10+
   // More enemies per round means smaller total waveHP is spread across more enemies
   const queue = [];
 
-  // Target average enemy HP based on wave (scales linearly 20 → 100)
-  const avgEnemyHP = 20 + Math.min(wave - 1, 9) * (100 - 20) / 9;
+  // Target average enemy HP based on wave (scales linearly 10 → 200)
+  const avgEnemyHP = 10 + Math.min(wave - 1, 9) * (200 - 10) / 9;
   const minHP = Math.max(4, avgEnemyHP * 0.4);
   const maxHP = avgEnemyHP * 1.6;
 
@@ -740,11 +754,11 @@ function gameOver() {
 }
 
 const upgrades = {
-  fireRate:   { name:'Fire Rate',     desc:'+25% turret fire rate', base:14, max:20, apply:()=>{ game.fireRate *= 1.25; } },
-  damage:     { name:'Turret Damage', desc:'+35% turret damage', base:16, max:30, apply:()=>{ game.damage *= 1.35; } },
+  fireRate:   { name:'Fire Rate',     desc:'+12.5% turret fire rate', base:14, max:20, apply:()=>{ game.fireRate *= 1.125; } },
+  damage:     { name:'Turret Damage', desc:'+17.5% turret damage', base:16, max:30, apply:()=>{ game.damage *= 1.175; } },
   pierce:     { name:'Pierce',        desc:'Bullets pierce enemies (reduced dmg)', base:26, max:6, apply:()=>{ game.pierce += 1; } },
   autoTurret: { name:'Build Auto-Turret', desc:'Adds an auto-turret', base:38, max:4, apply:()=>{ addAutoTurret(); } },
-  autoPower:  { name:'Auto-Turret Power', desc:'+35% auto dmg & rate', base:24, max:25, apply:()=>{ game.autoDamage*=1.35; game.autoFireRate*=1.20; } },
+  autoPower:  { name:'Auto-Turret Power', desc:'+17.5% auto dmg & rate', base:24, max:25, apply:()=>{ game.autoDamage*=1.175; game.autoFireRate*=1.10; } },
   maxHp:      { name:'Max HP',        desc:'+30 max HP', base:18, max:40, apply:()=>{ game.maxHp += 30; } },
   regen:      { name:'HP Regen',      desc:'+1.2 HP/sec', base:28, max:20, apply:()=>{ game.hpRegen += 1.2; } },
   repair:     { name:'Repair Tower',  desc:'Restore 40 HP', repair:true, healAmount:40 },
@@ -773,11 +787,13 @@ function calculateNextWaveHP() {
   const playerMainDPS = game.damage * game.fireRate;
   const playerAutoDPS = game.autoTurrets.length * game.autoDamage * game.autoFireRate;
 
+  // waveHP = baseDamage / (targetRatio − regen/100); clamp denominator > 0
+  const regenDenom = Math.max(0.1, targetRatio - game.hpRegen / 100);
+
   // Step 1: Use current wave's duration as baseline
   const baselineDuration = game.waveDuration;
   const baselineBaseDamage = baselineDuration * ((playerMainDPS * lastWaveAccuracy) + playerAutoDPS);
-  const baselineRegenFactor = baselineDuration * game.hpRegen / 100;
-  let nextWaveHP = Math.round(baselineBaseDamage / (targetRatio - baselineRegenFactor));
+  let nextWaveHP = Math.round(baselineBaseDamage / regenDenom);
 
   // Step 2: Build the actual queue for next wave
   const tempQueue = buildWaveComposition(nextWaveHP, nextWave);
@@ -787,8 +803,7 @@ function calculateNextWaveHP() {
 
   // Step 4: Recalculate waveHP with exact duration
   const exactBaseDamage = exactDuration * ((playerMainDPS * lastWaveAccuracy) + playerAutoDPS);
-  const exactRegenFactor = exactDuration * game.hpRegen / 100;
-  const finalWaveHP = Math.round(exactBaseDamage / (targetRatio - exactRegenFactor));
+  const finalWaveHP = Math.round(exactBaseDamage / regenDenom);
 
   // Step 5: If waveHP changed significantly, rebuild queue once more
   let finalQueue = tempQueue;
@@ -799,7 +814,7 @@ function calculateNextWaveHP() {
   // Step 6: Final exact duration
   const finalDuration = calculateWaveDurationExact(finalQueue, nextWave);
   const finalBaseDamage = finalDuration * ((playerMainDPS * lastWaveAccuracy) + playerAutoDPS);
-  const finalRegenFactor = finalDuration * game.hpRegen / 100;
+  const finalRegenFactor = (game.hpRegen * finalWaveHP) / 100;
 
   return {
     playerDPS: playerMainDPS,
@@ -947,19 +962,21 @@ function update(dt) {
     shakeT -= dt;
     const intensity = shakeT / 0.2;
     camera.position.x = (Math.random() - 0.5) * 0.7 * intensity;
-    camera.position.y = 40 + (Math.random() - 0.5) * 0.6 * intensity;
-  } else { camera.position.x = 0; camera.position.y = 40; }
+    camera.position.y = 52 + (Math.random() - 0.5) * 0.6 * intensity;
+  } else { camera.position.x = 0; camera.position.y = 52; }
 
   updateHUD();
 }
 
 function updateHUD() {
-  hudWave.textContent = 'WAVE ' + game.wave + (state === State.PLAYING ? ' ⏱ ' + Math.ceil(game.waveTimer) + 's' : '');
-  hudCoins.textContent = '🪙 ' + game.coins;
-  const f = game.hp / game.maxHp;
-  hudHp.textContent = '❤ ' + Math.ceil(game.hp) + '/' + game.maxHp;
-  hudHp.style.color = f > 0.25 ? '#6ee08a' : '#ff7a7a';
-  enemyCount.textContent = '👾 ' + (enemies.length + toSpawn) + ' left';
+  // Prominent top row: wave, time, coins, health, enemies remaining
+  document.getElementById('tbWave').textContent = game.wave;
+  document.getElementById('tbTime').textContent = (state === State.PLAYING ? Math.ceil(game.waveTimer) : 0) + 's';
+  document.getElementById('tbCoins').textContent = game.coins;
+  const tbHp = document.getElementById('tbHp');
+  tbHp.textContent = Math.ceil(game.hp) + '/' + game.maxHp;
+  tbHp.style.color = game.hp / game.maxHp > 0.25 ? '#6ee08a' : '#ff7a7a';
+  document.getElementById('tbEnemies').textContent = (enemies.length + toSpawn);
 
   // Dashboard - Full economic stats
   const mainDps = game.damage * game.fireRate;
@@ -973,9 +990,7 @@ function updateHUD() {
   // Actual difficulty ratio = Effective Damage / Wave HP (constant wave HP)
   const actualRatio = expectedNextWaveHP > 0 ? effDmg / expectedNextWaveHP : 0;
 
-  document.getElementById('dashWaveNum').textContent = game.wave;
-  document.getElementById('dashWaveLen').textContent = game.waveDuration;
-  document.getElementById('dashEnemyCount').textContent = spawnQueue.length;
+  document.getElementById('dashWaveLen').textContent = game.waveDuration + 's';
   document.getElementById('dashDPS').textContent = mainDps.toFixed(1);
   document.getElementById('dashAcc').textContent = acc + '%';
   document.getElementById('dashAutoDPS').textContent = autoDps.toFixed(1);
@@ -984,7 +999,6 @@ function updateHUD() {
   document.getElementById('dashWaveHP').textContent = expectedNextWaveHP.toFixed(0);
   document.getElementById('dashActualRatio').textContent = actualRatio.toFixed(2);
   document.getElementById('dashTargetRatio').textContent = difficultyRatioTarget.toFixed(2);
-  document.getElementById('dashCoins').textContent = game.coins;
 }
 
 function showWaveSummary(accuracy, totalDps) {
