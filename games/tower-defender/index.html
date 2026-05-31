@@ -107,9 +107,13 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x1a2a4a);
 scene.fog = new THREE.Fog(0x1a2a4a, 42, 110);
 
-const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 220);
-camera.position.set(0, 70, 18);
-camera.lookAt(0, -20, -18);
+// Near-overhead view (~75° down / ~15° forward tilt), centered over the battlefield.
+// Camera sits above the player side and looks forward & down so the WALL (Z=0)
+// lands near the bottom of the screen and the spawn zone (Z=-52) recedes to the top.
+// Wide FOV ensures the full wall width fits across a portrait phone screen.
+const camera = new THREE.PerspectiveCamera(88, 1, 0.1, 220);
+camera.position.set(0, 62, -8);
+camera.lookAt(0, 0, -26);
 
 let composer, bloom;
 function buildComposer(w, h) {
@@ -932,8 +936,8 @@ function update(dt) {
     shakeT -= dt;
     const intensity = shakeT / 0.2;
     camera.position.x = (Math.random() - 0.5) * 0.7 * intensity;
-    camera.position.y = 16 + (Math.random() - 0.5) * 0.6 * intensity;
-  } else { camera.position.x = 0; camera.position.y = 16; }
+    camera.position.y = 62 + (Math.random() - 0.5) * 0.6 * intensity;
+  } else { camera.position.x = 0; camera.position.y = 62; }
 
   updateHUD();
 }
