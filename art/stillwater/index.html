@@ -260,10 +260,13 @@ window.addEventListener('resize', resize);
 
 /* moon position (kept in one place, reflection mirrors it) */
 const moon = { x: 0, y: 0, r: 0 };
+let moonInit = false;
 function placeMoon() {
-  moon.x = W * 0.70;
-  moon.y = horizon * 0.42;
   moon.r = clamp(Math.min(W, H) * 0.055, 28, 80);
+  if (!moonInit) { moon.x = W * 0.70; moon.y = horizon * 0.42; moonInit = true; }
+  // keep the moon in the sky and on-screen (e.g. after a resize)
+  moon.x = clamp(moon.x, moon.r, W - moon.r);
+  moon.y = clamp(moon.y, moon.r, horizon - moon.r * 0.4);
 }
 
 /* ============================================================
@@ -487,19 +490,26 @@ function drawMoonReflection() {
 }
 
 /* ----- interactive ripples from touch / click ----- */
+const HOLD_MAX = 2.2;                       // seconds of charge for the biggest ripple
 let ripples = [];
-function spawnRipple(px, py) {
+// charge state (set by pointer handlers, read while drawing)
+let charging = false, chargeStart = 0, chargeX = 0, chargeY = 0;
+function spawnRipple(px, py, hold) {
   if (py < horizon + 2) return;            // only on the water
   const depth = (py - horizon) / (H - horizon);
+  const holdK = clamp((hold || 0) / HOLD_MAX, 0, 1);
+  const size = 80 + holdK * 320;           // bigger the longer you held
   ripples.push({
     x: px, y: py,
     life: 0,
-    max: rand(2.6, 3.4),
-    maxR: rand(70, 120) * (0.6 + depth),   // bigger when closer to viewer
-    squash: 0.22 + depth * 0.30,           // vertical flatten from perspective
+    max: 3.0 + holdK * 3.0,                 // larger ripples linger longer
+    maxR: size * (0.6 + depth),             // and reach wider when closer to viewer
+    squash: 0.22 + depth * 0.30,            // vertical flatten from perspective
+    rings: 3 + Math.round(holdK * 3),       // richer rings when big
+    strength: 0.55 + holdK * 0.45,
   });
   if (ripples.length > 40) ripples.shift();
-  Sound.drip(px / W);
+  Sound.drip(px / W, 0.35 + holdK * 0.4);
 }
 function drawInteractiveRipples(dt) {
   ctx.save();
@@ -509,28 +519,47 @@ function drawInteractiveRipples(dt) {
     r.life += dt;
     const k = r.life / r.max;
     if (k >= 1) { ripples.splice(i, 1); continue; }
-    const ease = 1 - Math.pow(1 - k, 2);   // fast then slow expansion
+    const ease = 1 - Math.pow(1 - k, 2.2);  // fast then slow expansion
     const baseR = ease * r.maxR;
     const fade = (1 - k) * (1 - k);
-    // three concentric rings trailing the leading edge
-    for (let ring = 0; ring < 3; ring++) {
-      const rr = baseR - ring * 13;
+    // concentric rings trailing the leading edge — soft and subtle
+    const gap = r.maxR * 0.085;
+    for (let ring = 0; ring < r.rings; ring++) {
+      const rr = baseR - ring * gap;
       if (rr <= 2) continue;
-      const a = fade * (0.20 - ring * 0.05);
-      if (a <= 0.005) continue;
-      ctx.strokeStyle = `rgba(200,222,255,${a})`;
-      ctx.lineWidth = Math.max(0.6, 1.6 - ring * 0.4);
+      const a = fade * r.strength * (0.085 - ring * 0.012);
+      if (a <= 0.004) continue;
+      ctx.strokeStyle = `rgba(198,220,255,${a})`;
+      ctx.lineWidth = Math.max(0.5, 1.3 - ring * 0.18);
       ctx.beginPath();
       ctx.ellipse(r.x, r.y, rr, rr * r.squash, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
-    // a soft bright pip at the very center while young
-    if (k < 0.25) {
-      ctx.fillStyle = `rgba(225,235,255,${(0.25 - k) * 1.4})`;
+    // a faint touch of brightness at the very center while young
+    if (k < 0.22) {
+      ctx.fillStyle = `rgba(215,230,255,${(0.22 - k) * 0.7})`;
       ctx.beginPath();
       ctx.ellipse(r.x, r.y, 3, 3 * r.squash, 0, 0, Math.PI * 2);
       ctx.fill();
     }
+  }
+  // a gentle preview ring while you hold, hinting at the ripple's size
+  if (charging) {
+    const hold = clamp(t - chargeStart, 0, HOLD_MAX);
+    const holdK = hold / HOLD_MAX;
+    const depth = (chargeY - horizon) / (H - horizon);
+    const rr = (10 + holdK * 60) * (0.6 + depth);
+    const squash = 0.22 + depth * 0.30;
+    const a = 0.06 + 0.10 * holdK + 0.025 * Math.sin(t * 5);
+    ctx.strokeStyle = `rgba(200,222,255,${a})`;
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.ellipse(chargeX, chargeY, rr, rr * squash, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = `rgba(220,232,255,${0.08 + 0.10 * holdK})`;
+    ctx.beginPath();
+    ctx.ellipse(chargeX, chargeY, 3, 3 * squash, 0, 0, Math.PI * 2);
+    ctx.fill();
   }
   ctx.restore();
 }
@@ -805,24 +834,27 @@ const Sound = (() => {
     setTimeout(scheduleChime, rand(4500, 11000));
   }
 
-  // a soft water "plip" — a quick downward pitch drop with a bright tail
-  function drip(pan) {
+  // a soft water "plip" — a quick downward pitch drop with a bright tail.
+  // bigger ripples (higher vel) read a touch lower & rounder, but stay quiet.
+  function drip(pan, vel) {
     if (!ready || muted || !actx) return;
+    const v = clamp(vel == null ? 0.5 : vel, 0, 1);
     const now = actx.currentTime;
     const o = actx.createOscillator();
     o.type = 'sine';
-    const f0 = rand(680, 1050);
+    const f0 = rand(620, 980) * (1 - v * 0.3);   // deeper plip for larger ripples
     o.frequency.setValueAtTime(f0, now);
-    o.frequency.exponentialRampToValueAtTime(f0 * 0.45, now + 0.14);
+    o.frequency.exponentialRampToValueAtTime(f0 * 0.45, now + 0.16);
     const g = actx.createGain();
+    const peak = 0.025 + v * 0.035;              // quiet & subtle
     g.gain.setValueAtTime(0, now);
-    g.gain.linearRampToValueAtTime(0.10, now + 0.008);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
+    g.gain.linearRampToValueAtTime(peak, now + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.6);
     const p = actx.createStereoPanner ? actx.createStereoPanner() : null;
     o.connect(g);
     if (p) { p.pan.value = clamp((pan - 0.5) * 1.4, -1, 1); g.connect(p); p.connect(master); p.connect(convolver); }
     else { g.connect(master); g.connect(convolver); }
-    o.start(now); o.stop(now + 0.55);
+    o.start(now); o.stop(now + 0.7);
   }
 
   function start() {
@@ -873,8 +905,8 @@ function begin() {
 enter.addEventListener('click', begin);
 gate.addEventListener('click', (e) => { if (e.target === gate) begin(); });
 
-/* ----- touch / mouse on the water makes ripples ----- */
-let pressing = false, lastRippleT = 0;
+/* ----- touch / mouse: drag the moon, or hold on the water to charge a ripple ----- */
+let draggingMoon = false;
 function pointerPos(e) {
   const r = canvas.getBoundingClientRect();
   const src = e.touches ? e.touches[0] : e;
@@ -882,23 +914,36 @@ function pointerPos(e) {
 }
 function onDown(e) {
   if (!running) return;
-  pressing = true;
   const p = pointerPos(e);
-  spawnRipple(p.x, p.y);
-  lastRippleT = t;
-  e.preventDefault();
-}
-function onMove(e) {
-  if (!running || !pressing) return;
-  // trail ripples while dragging, throttled so it stays calm
-  if (t - lastRippleT > 0.10) {
-    const p = pointerPos(e);
-    spawnRipple(p.x, p.y);
-    lastRippleT = t;
+  const onMoon = Math.hypot(p.x - moon.x, p.y - moon.y) < moon.r * 1.7;
+  if (onMoon) {
+    draggingMoon = true;
+  } else if (p.y > horizon + 2) {
+    charging = true; chargeStart = t; chargeX = p.x; chargeY = p.y;
   }
   e.preventDefault();
 }
-function onUp() { pressing = false; }
+function onMove(e) {
+  if (!running) return;
+  const p = pointerPos(e);
+  if (draggingMoon) {
+    moon.x = clamp(p.x, moon.r, W - moon.r);
+    moon.y = clamp(p.y, moon.r, horizon - moon.r * 0.4);
+    e.preventDefault();
+  } else if (charging) {
+    chargeX = p.x;
+    chargeY = clamp(p.y, horizon + 2, H);
+    e.preventDefault();
+  }
+}
+function onUp() {
+  if (charging) {
+    const hold = t - chargeStart;
+    spawnRipple(chargeX, chargeY, hold);
+  }
+  charging = false;
+  draggingMoon = false;
+}
 canvas.addEventListener('mousedown', onDown);
 canvas.addEventListener('mousemove', onMove);
 window.addEventListener('mouseup', onUp);
