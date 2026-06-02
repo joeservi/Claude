@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Stillwater · a tranquil place</title>
+<title>Stillwater · a sunset lake</title>
 <style>
   :root { color-scheme: dark; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
     width: 100%; height: 100%;
-    background: #05060c;
+    background: #160d1a;
     overflow: hidden;
     font-family: ui-serif, Georgia, "Times New Roman", serif;
     -webkit-tap-highlight-color: transparent;
@@ -17,11 +17,11 @@
   }
   #scene { display: block; width: 100vw; height: 100vh; }
 
-  /* Soft vignette over everything */
+  /* Soft warm vignette over everything */
   #vignette {
     position: fixed; inset: 0; pointer-events: none;
-    background: radial-gradient(ellipse 120% 90% at 50% 42%,
-      rgba(0,0,0,0) 55%, rgba(0,0,0,0.35) 100%);
+    background: radial-gradient(ellipse 125% 95% at 50% 46%,
+      rgba(0,0,0,0) 58%, rgba(20,6,26,0.40) 100%);
     mix-blend-mode: multiply;
   }
 
@@ -31,34 +31,34 @@
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
     gap: 1.6rem;
-    background: radial-gradient(ellipse at 50% 40%, #0b1022 0%, #05060c 70%);
-    color: #cdd6f0; text-align: center;
+    background: radial-gradient(ellipse at 50% 62%, #46243f 0%, #241433 55%, #140d24 100%);
+    color: #f3e2d6; text-align: center;
     transition: opacity 2.4s ease;
   }
   #gate h1 {
     font-weight: 400; font-size: clamp(2rem, 6vw, 3.4rem);
-    letter-spacing: 0.18em; opacity: 0.92;
-    text-shadow: 0 0 30px rgba(140,170,255,0.25);
+    letter-spacing: 0.18em; opacity: 0.95;
+    text-shadow: 0 0 34px rgba(255,180,120,0.35);
   }
   #gate p {
     font-size: clamp(0.85rem, 2.4vw, 1.05rem);
-    letter-spacing: 0.08em; opacity: 0.55; font-style: italic;
+    letter-spacing: 0.08em; opacity: 0.62; font-style: italic;
     max-width: 32ch; line-height: 1.7;
   }
   #enter {
     margin-top: 0.6rem;
-    border: 1px solid rgba(180,200,255,0.35);
-    background: rgba(180,200,255,0.04);
-    color: #dde6ff;
+    border: 1px solid rgba(255,200,160,0.4);
+    background: rgba(255,200,160,0.05);
+    color: #ffe8d6;
     padding: 0.85rem 2.4rem; border-radius: 999px;
     font-family: inherit; font-size: 0.95rem; letter-spacing: 0.22em;
     cursor: pointer; transition: all 0.6s ease;
     backdrop-filter: blur(2px);
   }
   #enter:hover {
-    background: rgba(180,200,255,0.12);
-    border-color: rgba(200,215,255,0.6);
-    box-shadow: 0 0 40px rgba(150,180,255,0.2);
+    background: rgba(255,200,160,0.14);
+    border-color: rgba(255,215,180,0.7);
+    box-shadow: 0 0 40px rgba(255,170,110,0.28);
   }
   #gate.hidden { opacity: 0; pointer-events: none; }
 
@@ -66,15 +66,15 @@
   #mute {
     position: fixed; right: 18px; bottom: 16px; z-index: 9;
     width: 34px; height: 34px; border-radius: 50%;
-    border: 1px solid rgba(190,205,255,0.2);
-    background: rgba(10,14,28,0.35);
-    color: rgba(205,214,240,0.7);
+    border: 1px solid rgba(255,205,170,0.25);
+    background: rgba(40,20,30,0.35);
+    color: rgba(255,225,205,0.75);
     font-size: 15px; cursor: pointer; backdrop-filter: blur(3px);
     display: none; align-items: center; justify-content: center;
     transition: opacity 1.2s ease, background 0.4s;
-    opacity: 0.3;
+    opacity: 0.35;
   }
-  #mute:hover { opacity: 0.9; background: rgba(20,26,48,0.6); }
+  #mute:hover { opacity: 0.9; background: rgba(60,30,42,0.6); }
 </style>
 </head>
 <body>
@@ -84,7 +84,7 @@
 
   <div id="gate">
     <h1>Stillwater</h1>
-    <p>A quiet lake under the moon.<br>Stay as long as you like.</p>
+    <p>A lake at sunset.<br>Drag the sun. Touch the water.</p>
     <button id="enter">B&nbsp;&nbsp;E&nbsp;&nbsp;G&nbsp;&nbsp;I&nbsp;&nbsp;N</button>
   </div>
 
@@ -92,23 +92,23 @@
 "use strict";
 
 /* ============================================================
-   STILLWATER — a tranquil moonlit lake
+   STILLWATER — a tranquil lake at sunset
    Layered 2D canvas painting with living, never-repeating motion,
    paired with a generative ambient soundscape.
    ============================================================ */
 
 const canvas = document.getElementById('scene');
 const ctx = canvas.getContext('2d');
+const PI2 = Math.PI * 2;
 
 let W = 0, H = 0, DPR = 1;
 let horizon = 0;          // y of the waterline
 let t = 0;                // seconds of elapsed dream-time
 
-/* ---- a gentle deterministic-ish noise helpers ---- */
+/* ---- gentle helpers ---- */
 function rand(a, b) { return a + Math.random() * (b - a); }
 function lerp(a, b, x) { return a + (b - a) * x; }
 function clamp(x, a, b) { return x < a ? a : x > b ? b : x; }
-// smooth value noise for organic drift
 function hash(n){ const s = Math.sin(n) * 43758.5453123; return s - Math.floor(s); }
 function vnoise(x){
   const i = Math.floor(x), f = x - i;
@@ -117,82 +117,91 @@ function vnoise(x){
 }
 
 /* ============================================================
-   STAR FIELD
+   CLOUDS — soft sunset-lit puffs, pre-rendered once as sprites
    ============================================================ */
-let stars = [];
-function buildStars() {
-  stars = [];
-  const count = Math.round((W * H) / 9000);
-  for (let i = 0; i < count; i++) {
-    const y = rand(0, horizon * 0.96);
-    // stars thin out near the horizon, brighter & sparser up high
-    stars.push({
-      x: rand(0, W),
-      y,
-      r: rand(0.4, 1.5) * (0.6 + (1 - y / horizon) * 0.8),
-      base: rand(0.25, 0.9),
-      tw: rand(0.3, 1.4),        // twinkle speed
-      ph: rand(0, Math.PI * 2),  // twinkle phase
-      hue: rand(200, 230),
-      sat: rand(10, 40),
+let clouds = [];
+function makeCloudSprite() {
+  const w = Math.round(rand(240, 460));
+  const h = Math.round(w * rand(0.30, 0.46));
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const x2 = c.getContext('2d');
+  // 1) build a puffy alpha shape from clustered soft blobs
+  const puffs = 6 + Math.floor(Math.random() * 6);
+  for (let i = 0; i < puffs; i++) {
+    const px = w * (0.10 + 0.80 * (i / (puffs - 1)) + rand(-0.05, 0.05));
+    const py = h * (0.42 + rand(-0.12, 0.40));
+    const pr = h * rand(0.30, 0.58);
+    const g = x2.createRadialGradient(px, py, 0, px, py, pr);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.6, 'rgba(255,255,255,0.65)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    x2.fillStyle = g;
+    x2.beginPath(); x2.arc(px, py, pr, 0, PI2); x2.fill();
+  }
+  // 2) recolor the shape with a vertical sunset gradient (lit underside)
+  x2.globalCompositeOperation = 'source-in';
+  const vg = x2.createLinearGradient(0, 0, 0, h);
+  vg.addColorStop(0.00, 'rgba(108,86,150,0.95)');  // dusky purple top
+  vg.addColorStop(0.42, 'rgba(196,118,158,0.95)'); // mauve
+  vg.addColorStop(0.74, 'rgba(255,162,112,0.96)'); // warm
+  vg.addColorStop(1.00, 'rgba(255,206,150,0.98)'); // glowing underside
+  x2.fillStyle = vg;
+  x2.fillRect(0, 0, w, h);
+  return { canvas: c, w, h };
+}
+function buildClouds() {
+  clouds = [];
+  const n = clamp(Math.round(W / 260) + 4, 5, 10);
+  for (let i = 0; i < n; i++) {
+    const sprite = makeCloudSprite();
+    const scale = rand(0.5, 1.15);
+    clouds.push({
+      sprite, scale,
+      x: rand(-sprite.w * scale, W),
+      y: rand(H * 0.04, horizon * 0.66),
+      speed: rand(1.6, 6.5),
+      alpha: rand(0.62, 0.92),
     });
   }
+  // sort so smaller/higher (distant) draw first
+  clouds.sort((a, b) => a.scale - b.scale);
 }
 
 /* ============================================================
-   SHOOTING STARS — rare, slow, gentle
-   ============================================================ */
-let shootStars = [];
-let nextShoot = rand(7, 16);
-function spawnShoot() {
-  const x = rand(W * 0.1, W * 0.9);
-  const y = rand(horizon * 0.1, horizon * 0.5);
-  const ang = rand(Math.PI * 0.12, Math.PI * 0.32); // shallow downward
-  const dir = Math.random() < 0.5 ? 1 : -1;
-  const speed = rand(220, 360);
-  shootStars.push({
-    x, y,
-    vx: Math.cos(ang) * speed * dir,
-    vy: Math.sin(ang) * speed,
-    life: 0, max: rand(0.9, 1.6),
-    len: rand(60, 130),
-  });
-}
-
-/* ============================================================
-   MIST BANDS — soft horizontal fog drifting over the water/hills
+   LOW MIST — warm haze hugging the water's edge
    ============================================================ */
 let mist = [];
 function buildMist() {
   mist = [];
   for (let i = 0; i < 5; i++) {
     mist.push({
-      y: horizon - rand(-10, 60) - i * 8,
+      y: horizon - rand(-8, 50) - i * 7,
       x: rand(0, W),
-      speed: rand(4, 11) * (Math.random() < 0.5 ? 1 : -1),
-      amp: rand(10, 26),
-      h: rand(40, 90),
-      alpha: rand(0.04, 0.10),
+      speed: rand(3, 9) * (Math.random() < 0.5 ? 1 : -1),
+      amp: rand(8, 22),
+      h: rand(36, 80),
+      alpha: rand(0.03, 0.08),
     });
   }
 }
 
 /* ============================================================
-   FIREFLIES — wandering glow near the foreground
+   GNATS — tiny motes catching the last light over the water
    ============================================================ */
 let flies = [];
 function buildFlies() {
   flies = [];
-  const n = Math.round(W / 90) + 6;
+  const n = Math.round(W / 110) + 5;
   for (let i = 0; i < n; i++) {
     flies.push({
       x: rand(0, W),
-      y: rand(horizon - 40, H * 0.92),
-      nx: rand(0, 1000), ny: rand(0, 1000),  // noise seeds
-      r: rand(1.1, 2.4),
-      hue: rand(48, 70),
+      y: rand(horizon - 30, H * 0.9),
+      nx: rand(0, 1000), ny: rand(0, 1000),
+      r: rand(0.9, 2.0),
+      hue: rand(30, 48),
       blink: rand(0.4, 1.1),
-      ph: rand(0, Math.PI * 2),
+      ph: rand(0, PI2),
     });
   }
 }
@@ -205,33 +214,32 @@ function buildReeds() {
   reeds = [];
   const n = Math.round(W / 38) + 6;
   for (let i = 0; i < n; i++) {
-    const x = rand(-20, W + 20);
     reeds.push({
-      x,
+      x: rand(-20, W + 20),
       h: rand(H * 0.14, H * 0.34),
       w: rand(2, 4.5),
       sway: rand(0.5, 1.3),
-      ph: rand(0, Math.PI * 2),
+      ph: rand(0, PI2),
       bend: rand(0.3, 0.9) * (Math.random() < 0.5 ? 1 : -1),
-      head: Math.random() < 0.55,  // seed head?
+      head: Math.random() < 0.55,
       shade: rand(0, 1),
     });
   }
 }
 
-/* distant mountain ridge — generated once as a path */
+/* distant shoreline ridge — generated once */
 let ridges = [];
 function buildRidges() {
   ridges = [];
   for (let layer = 0; layer < 3; layer++) {
     const pts = [];
     const seg = 14 + layer * 4;
-    const baseY = horizon - 8 - layer * 0;
-    const height = (40 - layer * 10);
+    const baseY = horizon - 6;
+    const height = (34 - layer * 9);
     for (let i = 0; i <= seg; i++) {
       const x = (i / seg) * W;
       const n = vnoise(i * 0.6 + layer * 31.7) + vnoise(i * 1.7 + layer * 11.3) * 0.5;
-      pts.push({ x, y: baseY - n * height - layer * 6 });
+      pts.push({ x, y: baseY - n * height - layer * 5 });
     }
     ridges.push({ pts, layer });
   }
@@ -249,8 +257,8 @@ function resize() {
   canvas.style.width = W + 'px';
   canvas.style.height = H + 'px';
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  horizon = H * 0.52;
-  buildStars();
+  horizon = H * 0.54;
+  buildClouds();
   buildMist();
   buildFlies();
   buildReeds();
@@ -258,112 +266,87 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
-/* moon position (kept in one place, reflection mirrors it) */
-const moon = { x: 0, y: 0, r: 0 };
-let moonInit = false;
-function placeMoon() {
-  moon.r = clamp(Math.min(W, H) * 0.055, 28, 80);
-  if (!moonInit) { moon.x = W * 0.70; moon.y = horizon * 0.42; moonInit = true; }
-  // keep the moon in the sky and on-screen (e.g. after a resize)
-  moon.x = clamp(moon.x, moon.r, W - moon.r);
-  moon.y = clamp(moon.y, moon.r, horizon - moon.r * 0.4);
+/* sun position — draggable, but kept low above the horizon.
+   the reflection mirrors sun.x. */
+const sun = { x: 0, y: 0, r: 0 };
+let sunInit = false;
+function placeSun() {
+  sun.r = clamp(Math.min(W, H) * 0.06, 32, 92);
+  if (!sunInit) { sun.x = W * 0.5; sun.y = horizon - sun.r * 0.8; sunInit = true; }
+  // horizontally free; vertically pinned to just above the horizon
+  sun.x = clamp(sun.x, 0, W);
+  const highest = horizon - H * 0.16;     // the most it can rise (still low)
+  const lowest  = horizon - sun.r * 0.20; // resting just over the waterline
+  sun.y = clamp(sun.y, highest, lowest);
 }
 
 /* ============================================================
-   DRAWING
+   DRAWING — SKY
    ============================================================ */
-
 function drawSky() {
-  // slow hue breathing across the whole night
-  const shift = Math.sin(t * 0.012) * 6;
+  const breathe = Math.sin(t * 0.02) * 4;
   const g = ctx.createLinearGradient(0, 0, 0, horizon);
-  g.addColorStop(0.00, `hsl(${230 + shift}, 48%, 7%)`);
-  g.addColorStop(0.45, `hsl(${226 + shift}, 45%, 11%)`);
-  g.addColorStop(0.78, `hsl(${218 + shift}, 42%, 16%)`);
-  g.addColorStop(1.00, `hsl(${205 + shift}, 38%, 22%)`);
+  g.addColorStop(0.00, `hsl(${244 + breathe}, 46%, 20%)`);  // deep blue-violet zenith
+  g.addColorStop(0.30, `hsl(${278 + breathe}, 44%, 30%)`);  // purple
+  g.addColorStop(0.55, `hsl(${326 + breathe}, 52%, 42%)`);  // magenta-rose
+  g.addColorStop(0.76, `hsl(${18  + breathe}, 78%, 54%)`);  // orange
+  g.addColorStop(1.00, `hsl(${40  + breathe}, 88%, 62%)`);  // golden horizon
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, horizon);
-}
 
-function drawStars() {
+  // a broad warm haze localized around the sun's column
   ctx.save();
-  for (const s of stars) {
-    const tw = 0.55 + 0.45 * Math.sin(t * s.tw + s.ph);
-    const a = clamp(s.base * tw, 0, 1);
-    ctx.globalAlpha = a;
-    ctx.fillStyle = `hsl(${s.hue}, ${s.sat}%, 92%)`;
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-    ctx.fill();
-    // soft glow for the brighter ones
-    if (s.r > 1.1) {
-      ctx.globalAlpha = a * 0.18;
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, s.r * 3.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
+  ctx.globalCompositeOperation = 'lighter';
+  const glow = ctx.createRadialGradient(sun.x, horizon, sun.r * 0.5, sun.x, horizon, Math.max(W, H) * 0.55);
+  glow.addColorStop(0, 'rgba(255,210,140,0.40)');
+  glow.addColorStop(0.25, 'rgba(255,160,90,0.18)');
+  glow.addColorStop(0.6, 'rgba(255,120,80,0.05)');
+  glow.addColorStop(1, 'rgba(255,120,80,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, W, horizon);
   ctx.restore();
 }
 
-function drawShootStars(dt) {
-  for (let i = shootStars.length - 1; i >= 0; i--) {
-    const sh = shootStars[i];
-    sh.life += dt;
-    sh.x += sh.vx * dt;
-    sh.y += sh.vy * dt;
-    const k = sh.life / sh.max;
-    if (k >= 1) { shootStars.splice(i, 1); continue; }
-    const a = Math.sin(k * Math.PI) * 0.9;  // fade in then out
-    const tx = sh.x - sh.vx * (sh.len / 340);
-    const ty = sh.y - sh.vy * (sh.len / 340);
-    const grad = ctx.createLinearGradient(sh.x, sh.y, tx, ty);
-    grad.addColorStop(0, `rgba(255,255,255,${a})`);
-    grad.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.strokeStyle = grad;
-    ctx.lineWidth = 1.6;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(sh.x, sh.y);
-    ctx.lineTo(tx, ty);
-    ctx.stroke();
+function drawClouds(dt) {
+  ctx.save();
+  for (const c of clouds) {
+    c.x += c.speed * dt;
+    const sw = c.sprite.w * c.scale, sh = c.sprite.h * c.scale;
+    if (c.x > W + 20) c.x = -sw - 20;
+    // gentle vertical drift
+    const yy = c.y + Math.sin(t * 0.1 + c.x * 0.002) * 4;
+    ctx.globalAlpha = c.alpha;
+    ctx.drawImage(c.sprite.canvas, c.x, yy, sw, sh);
   }
+  ctx.globalAlpha = 1;
+  ctx.restore();
 }
 
-function drawMoon() {
-  const { x, y, r } = moon;
-  // outer halo
-  const halo = ctx.createRadialGradient(x, y, r * 0.5, x, y, r * 6);
-  halo.addColorStop(0, 'rgba(225,232,255,0.30)');
-  halo.addColorStop(0.25, 'rgba(190,205,255,0.12)');
-  halo.addColorStop(1, 'rgba(190,205,255,0)');
+function drawSun() {
+  const { x, y, r } = sun;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  // wide radiant halo
+  const halo = ctx.createRadialGradient(x, y, r * 0.4, x, y, r * 9);
+  halo.addColorStop(0, 'rgba(255,224,160,0.50)');
+  halo.addColorStop(0.14, 'rgba(255,170,95,0.30)');
+  halo.addColorStop(0.42, 'rgba(255,120,80,0.10)');
+  halo.addColorStop(1, 'rgba(255,120,80,0)');
   ctx.fillStyle = halo;
-  ctx.beginPath(); ctx.arc(x, y, r * 6, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x, y, r * 9, 0, PI2); ctx.fill();
+  ctx.restore();
 
   // disc
-  const disc = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.2, x, y, r);
-  disc.addColorStop(0, '#fdfdf6');
-  disc.addColorStop(0.7, '#e7ecfa');
-  disc.addColorStop(1, '#c3cbe6');
+  const disc = ctx.createRadialGradient(x, y - r * 0.15, r * 0.1, x, y, r);
+  disc.addColorStop(0, '#fff7e6');
+  disc.addColorStop(0.5, '#ffd884');
+  disc.addColorStop(0.85, '#ff9f52');
+  disc.addColorStop(1, 'rgba(255,140,72,0.9)');
   ctx.fillStyle = disc;
-  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
-
-  // faint craters / maria
-  ctx.save();
-  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.clip();
-  ctx.globalAlpha = 0.10;
-  ctx.fillStyle = '#9aa6c8';
-  const craters = [[-0.25,-0.15,0.28],[0.22,0.1,0.22],[0.05,0.35,0.16],[-0.35,0.28,0.13],[0.38,-0.28,0.12]];
-  for (const c of craters) {
-    ctx.beginPath();
-    ctx.arc(x + c[0]*r, y + c[1]*r, c[2]*r, 0, Math.PI*2);
-    ctx.fill();
-  }
-  ctx.restore();
+  ctx.beginPath(); ctx.arc(x, y, r, 0, PI2); ctx.fill();
 }
 
 function drawRidges() {
-  // layered silhouettes, darker/closer as layer increases
   for (const rg of ridges) {
     const l = rg.layer;
     ctx.beginPath();
@@ -376,8 +359,7 @@ function drawRidges() {
     }
     ctx.lineTo(W, horizon);
     ctx.closePath();
-    const shade = 9 + l * 3;
-    ctx.fillStyle = `hsl(220, 35%, ${shade}%)`;
+    ctx.fillStyle = `hsl(286, 30%, ${9 + l * 4}%)`;
     ctx.fill();
   }
 }
@@ -388,11 +370,10 @@ function drawMist(dt) {
     m.x += m.speed * dt;
     const yy = m.y + Math.sin(t * 0.2 + m.x * 0.001) * 4;
     const g = ctx.createLinearGradient(0, yy - m.h/2, 0, yy + m.h/2);
-    g.addColorStop(0, `rgba(200,212,235,0)`);
-    g.addColorStop(0.5, `rgba(205,216,238,${m.alpha})`);
-    g.addColorStop(1, `rgba(200,212,235,0)`);
+    g.addColorStop(0, 'rgba(255,206,180,0)');
+    g.addColorStop(0.5, `rgba(255,210,185,${m.alpha})`);
+    g.addColorStop(1, 'rgba(255,206,180,0)');
     ctx.fillStyle = g;
-    // a soft wavy band spanning the width
     ctx.beginPath();
     ctx.moveTo(0, yy);
     for (let x = 0; x <= W; x += 40) {
@@ -407,52 +388,62 @@ function drawMist(dt) {
   ctx.restore();
 }
 
-function drawWater(dt0) {
-  // base water gradient (mirror of sky, darker & cooler)
+/* ============================================================
+   DRAWING — WATER
+   ============================================================ */
+function drawWater(dt) {
+  // base water gradient — reflects the sunset, deepening with distance
   const g = ctx.createLinearGradient(0, horizon, 0, H);
-  g.addColorStop(0, 'hsl(205, 40%, 18%)');
-  g.addColorStop(0.25, 'hsl(214, 42%, 12%)');
-  g.addColorStop(1, 'hsl(225, 48%, 5%)');
+  g.addColorStop(0.00, 'hsl(36, 78%, 50%)');   // bright at the waterline
+  g.addColorStop(0.12, 'hsl(20, 62%, 38%)');
+  g.addColorStop(0.40, 'hsl(322, 42%, 27%)');  // plum
+  g.addColorStop(0.72, 'hsl(268, 46%, 17%)');
+  g.addColorStop(1.00, 'hsl(248, 52%, 9%)');   // deep foreground
   ctx.fillStyle = g;
   ctx.fillRect(0, horizon, W, H - horizon);
 
-  // reflected stars — faint, wobbling
+  // reflections live below the waterline
   ctx.save();
-  for (const s of stars) {
-    if (s.r < 0.9) continue;
-    const ry = horizon + (horizon - s.y) * 0.5;
-    if (ry > H) continue;
-    const wob = Math.sin(t * 1.3 + s.x * 0.05) * 1.5;
-    const tw = 0.55 + 0.45 * Math.sin(t * s.tw + s.ph);
-    ctx.globalAlpha = s.base * tw * 0.22;
-    ctx.fillStyle = '#cfe0ff';
-    ctx.beginPath();
-    ctx.arc(s.x + wob, ry, s.r * 0.8, 0, Math.PI * 2);
-    ctx.fill();
-  }
+  ctx.beginPath();
+  ctx.rect(0, horizon, W, H - horizon);
+  ctx.clip();
+  drawCloudReflections();
   ctx.restore();
 
-  drawMoonReflection();
-  drawRipples();
-  drawInteractiveRipples(dt0);
+  drawSunReflection();
+  drawAmbientRipples();
+  drawInteractiveRipples(dt);
 }
 
-function drawMoonReflection() {
-  // A natural moonpath: narrow beneath the moon, fanning toward the viewer,
-  // with a soft Gaussian falloff at the edges (no hard column).
-  const cx = moon.x;
-  const top = horizon;
-  const bottom = H;
-  const span = bottom - top;
+function drawCloudReflections() {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (const c of clouds) {
+    const sw = c.sprite.w * c.scale, sh = c.sprite.h * c.scale;
+    const wob = Math.sin(t * 0.6 + c.x * 0.01) * 3;
+    const ry = horizon + 3 + (horizon - (c.y + sh)) * 0.10;
+    ctx.save();
+    ctx.translate(c.x + sw / 2 + wob, ry);
+    ctx.scale(c.scale, -c.scale);
+    ctx.globalAlpha = c.alpha * 0.16;
+    ctx.drawImage(c.sprite.canvas, -c.sprite.w / 2, 0);
+    ctx.restore();
+  }
+  ctx.restore();
+}
 
-  // the path widens with depth (perspective) — measured in half-widths
-  const wNear = moon.r * 0.55;            // at the horizon, about the moon's width
-  const wFar  = moon.r * 3.6;             // near the viewer, fanned out
+function drawSunReflection() {
+  // a warm sunpath: narrow beneath the sun, fanning toward the viewer,
+  // with a soft Gaussian falloff at the edges (no hard column).
+  const cx = sun.x;
+  const top = horizon;
+  const span = H - top;
+  const wNear = sun.r * 0.55;
+  const wFar  = sun.r * 4.0;
   const halfWidthAt = (depth) => wNear + (wFar - wNear) * depth * depth;
 
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-
   const rowH = 5;
   const rows = Math.ceil(span / rowH);
   for (let i = 0; i < rows; i++) {
@@ -461,56 +452,106 @@ function drawMoonReflection() {
     const hw = halfWidthAt(depth);
     const phase = t * (0.8 + depth * 1.4);
 
-    // 1) soft underlying glow for this row — a horizontal gradient that
-    //    fades to nothing at the edges, so the path has no visible border.
-    const rowAlpha = (0.12 * (1 - depth * 0.65));
+    // soft underlying warm glow for this row (edges fade to nothing)
+    const rowAlpha = 0.16 * (1 - depth * 0.6);
     const g = ctx.createLinearGradient(cx - hw, 0, cx + hw, 0);
-    g.addColorStop(0.0, 'rgba(205,218,255,0)');
-    g.addColorStop(0.5, `rgba(210,222,255,${rowAlpha})`);
-    g.addColorStop(1.0, 'rgba(205,218,255,0)');
+    g.addColorStop(0.0, 'rgba(255,190,110,0)');
+    g.addColorStop(0.5, `rgba(255,196,120,${rowAlpha})`);
+    g.addColorStop(1.0, 'rgba(255,190,110,0)');
     ctx.fillStyle = g;
     ctx.fillRect(cx - hw, y - rowH * 0.5, hw * 2, rowH + 0.5);
 
-    // 2) broken shimmer dashes, denser near the center, weighted by a
-    //    Gaussian of their horizontal offset so the path edges dissolve.
+    // broken shimmer glints, denser & brighter near the center line
     const segs = 4 + Math.floor(depth * 6);
     for (let sgi = 0; sgi < segs; sgi++) {
       const n = vnoise(i * 0.7 + sgi * 13.1 + phase);
-      const off = (n - 0.5) * 2 * hw;              // horizontal offset from center
+      const off = (n - 0.5) * 2 * hw;
       const gauss = Math.exp(-(off * off) / (2 * (hw * 0.5) * (hw * 0.5)));
       const flick = 0.5 + 0.5 * Math.sin(phase * 3 + sgi * 2.1 + i * 0.3);
-      const w = (3 + n * 12) * (0.5 + depth);
-      const a = (0.05 + 0.16 * flick) * gauss * (1 - depth * 0.35);
+      const w = (3 + n * 13) * (0.5 + depth);
+      const a = (0.06 + 0.18 * flick) * gauss * (1 - depth * 0.3);
       if (a < 0.01) continue;
-      ctx.fillStyle = `rgba(238,243,255,${a})`;
+      ctx.fillStyle = `rgba(255,234,190,${a})`;
       ctx.fillRect(cx + off - w / 2, y - 1, w, 2);
     }
   }
   ctx.restore();
 }
 
-/* ----- interactive ripples from touch / click ----- */
-const HOLD_MAX = 2.2;                       // seconds of charge for the biggest ripple
-let ripples = [];
-// charge state (set by pointer handlers, read while drawing)
-let charging = false, chargeStart = 0, chargeX = 0, chargeY = 0;
-function spawnRipple(px, py, hold) {
-  if (py < horizon + 2) return;            // only on the water
-  const depth = (py - horizon) / (H - horizon);
-  const holdK = clamp((hold || 0) / HOLD_MAX, 0, 1);
-  const size = 80 + holdK * 320;           // bigger the longer you held
-  ripples.push({
-    x: px, y: py,
-    life: 0,
-    max: 3.0 + holdK * 3.0,                 // larger ripples linger longer
-    maxR: size * (0.6 + depth),             // and reach wider when closer to viewer
-    squash: 0.22 + depth * 0.30,            // vertical flatten from perspective
-    rings: 3 + Math.round(holdK * 3),       // richer rings when big
-    strength: 0.55 + holdK * 0.45,
-  });
-  if (ripples.length > 40) ripples.shift();
-  Sound.drip(px / W, 0.35 + holdK * 0.4);
+function drawAmbientRipples() {
+  // faint moving highlight lines across the whole lake for life
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 26; i++) {
+    const depth = i / 26;
+    const y = horizon + depth * depth * (H - horizon);
+    const drift = Math.sin(t * 0.5 + i * 0.8) * 12;
+    const a = 0.010 + 0.018 * (1 - depth);
+    ctx.strokeStyle = `rgba(255,210,170,${a})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 0; x <= W; x += 28) {
+      const yy = y + Math.sin(x * 0.012 + t * 0.7 + i) * (1.5 + depth * 3) + drift * 0.1;
+      if (x === 0) ctx.moveTo(x, yy); else ctx.lineTo(x, yy);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
 }
+
+/* ============================================================
+   INTERACTIVE RIPPLES + SPLASH DROPLETS
+   Real radiating wavefronts: several rings spread out over time,
+   even from a quick tap. Holding charges a bigger disturbance.
+   ============================================================ */
+const HOLD_MAX = 2.0;
+let ripples = [];
+let drops = [];
+let charging = false, chargeStart = 0, chargeX = 0, chargeY = 0;
+
+function spawnRipple(px, py, hold, secondary) {
+  if (py < horizon + 2) return;
+  const depth = (py - horizon) / (H - horizon);
+  if (secondary) {
+    ripples.push({
+      x: px, y: py, life: 0, max: 1.6,
+      maxR: rand(26, 60) * (0.6 + depth), squash: 0.20 + depth * 0.30,
+      fronts: 2, interval: 0.16, strength: 0.5,
+    });
+    return;
+  }
+  const holdK = clamp((hold || 0) / HOLD_MAX, 0, 1);
+  // even a tap is sizeable; holding grows it considerably
+  const size = 160 + holdK * 440;
+  ripples.push({
+    x: px, y: py, life: 0,
+    max: 2.6 + holdK * 3.0,
+    maxR: size * (0.55 + depth),
+    squash: 0.20 + depth * 0.30,
+    fronts: 3 + Math.round(holdK * 5),     // many radiating rings
+    interval: 0.17,
+    strength: 0.75 + holdK * 0.35,
+  });
+  if (ripples.length > 48) ripples.shift();
+
+  // a burst of droplets thrown up by the impact
+  const n = Math.round(3 + holdK * 9);
+  for (let i = 0; i < n; i++) {
+    const ang = rand(0, PI2);
+    const spd = rand(40, 130) * (0.7 + holdK);
+    drops.push({
+      x: px, y: py, y0: py,
+      vx: Math.cos(ang) * spd * 0.55,
+      vy: -rand(140, 320) * (0.5 + holdK * 0.9),
+      squash: 0.20 + depth * 0.30,
+      r: rand(1.2, 2.6),
+    });
+  }
+  if (drops.length > 240) drops.splice(0, drops.length - 240);
+
+  Sound.drip(px / W, 0.4 + holdK * 0.5);
+}
+
 function drawInteractiveRipples(dt) {
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
@@ -519,68 +560,72 @@ function drawInteractiveRipples(dt) {
     r.life += dt;
     const k = r.life / r.max;
     if (k >= 1) { ripples.splice(i, 1); continue; }
-    const ease = 1 - Math.pow(1 - k, 2.2);  // fast then slow expansion
-    const baseR = ease * r.maxR;
-    const fade = (1 - k) * (1 - k);
-    // concentric rings trailing the leading edge — soft and subtle
-    const gap = r.maxR * 0.085;
-    for (let ring = 0; ring < r.rings; ring++) {
-      const rr = baseR - ring * gap;
-      if (rr <= 2) continue;
-      const a = fade * r.strength * (0.085 - ring * 0.012);
+    const overall = (1 - k);               // whole-event fade
+    const frontDur = r.max * 0.85;
+    for (let j = 0; j < r.fronts; j++) {
+      const fl = r.life - j * r.interval;  // this wavefront's age
+      if (fl <= 0) continue;
+      const fk = fl / frontDur;
+      if (fk >= 1) continue;
+      const ease = 1 - Math.pow(1 - fk, 2.2);
+      const rr = ease * r.maxR;
+      if (rr <= 1) continue;
+      const a = r.strength * Math.pow(1 - fk, 1.3) * 0.22 * overall;
       if (a <= 0.004) continue;
-      ctx.strokeStyle = `rgba(198,220,255,${a})`;
-      ctx.lineWidth = Math.max(0.5, 1.3 - ring * 0.18);
+      ctx.strokeStyle = `rgba(255,231,196,${a})`;
+      ctx.lineWidth = Math.max(0.6, 2.4 * (1 - fk));
       ctx.beginPath();
-      ctx.ellipse(r.x, r.y, rr, rr * r.squash, 0, 0, Math.PI * 2);
+      ctx.ellipse(r.x, r.y, rr, rr * r.squash, 0, 0, PI2);
       ctx.stroke();
     }
-    // a faint touch of brightness at the very center while young
-    if (k < 0.22) {
-      ctx.fillStyle = `rgba(215,230,255,${(0.22 - k) * 0.7})`;
+    // bright impact pip at the very center while young
+    if (k < 0.18) {
+      const a = (0.18 - k) * 1.4;
+      ctx.fillStyle = `rgba(255,240,210,${a})`;
       ctx.beginPath();
-      ctx.ellipse(r.x, r.y, 3, 3 * r.squash, 0, 0, Math.PI * 2);
+      ctx.ellipse(r.x, r.y, 4, 4 * r.squash, 0, 0, PI2);
       ctx.fill();
     }
   }
-  // a gentle preview ring while you hold, hinting at the ripple's size
+
+  // preview ring while holding
   if (charging) {
     const hold = clamp(t - chargeStart, 0, HOLD_MAX);
     const holdK = hold / HOLD_MAX;
     const depth = (chargeY - horizon) / (H - horizon);
-    const rr = (10 + holdK * 60) * (0.6 + depth);
-    const squash = 0.22 + depth * 0.30;
-    const a = 0.06 + 0.10 * holdK + 0.025 * Math.sin(t * 5);
-    ctx.strokeStyle = `rgba(200,222,255,${a})`;
-    ctx.lineWidth = 1.1;
+    const rr = (12 + holdK * 80) * (0.55 + depth);
+    const squash = 0.20 + depth * 0.30;
+    const a = 0.08 + 0.12 * holdK + 0.03 * Math.sin(t * 5);
+    ctx.strokeStyle = `rgba(255,224,180,${a})`;
+    ctx.lineWidth = 1.2;
     ctx.beginPath();
-    ctx.ellipse(chargeX, chargeY, rr, rr * squash, 0, 0, Math.PI * 2);
+    ctx.ellipse(chargeX, chargeY, rr, rr * squash, 0, 0, PI2);
     ctx.stroke();
-    ctx.fillStyle = `rgba(220,232,255,${0.08 + 0.10 * holdK})`;
-    ctx.beginPath();
-    ctx.ellipse(chargeX, chargeY, 3, 3 * squash, 0, 0, Math.PI * 2);
-    ctx.fill();
   }
   ctx.restore();
 }
 
-function drawRipples() {
-  // faint moving highlight lines across the whole lake for life
+function drawSplash(dt) {
+  if (!drops.length) return;
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  for (let i = 0; i < 26; i++) {
-    const depth = i / 26;
-    const y = horizon + depth * depth * (H - horizon);
-    const drift = Math.sin(t * 0.5 + i * 0.8) * 12;
-    const a = 0.012 + 0.02 * (1 - depth);
-    ctx.strokeStyle = `rgba(180,205,255,${a})`;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let x = 0; x <= W; x += 28) {
-      const yy = y + Math.sin(x * 0.012 + t * 0.7 + i) * (1.5 + depth * 3) + drift * 0.1;
-      if (x === 0) ctx.moveTo(x, yy); else ctx.lineTo(x, yy);
+  for (let i = drops.length - 1; i >= 0; i--) {
+    const d = drops[i];
+    d.vy += 620 * dt;                 // gravity
+    d.x += d.vx * dt;
+    d.y += d.vy * dt;
+    if (d.vy > 0 && d.y >= d.y0) {     // fallen back to the surface
+      spawnRipple(d.x, d.y0, 0, true); // a small secondary ring
+      drops.splice(i, 1);
+      continue;
     }
-    ctx.stroke();
+    const glow = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, d.r * 4);
+    glow.addColorStop(0, 'rgba(255,236,200,0.9)');
+    glow.addColorStop(1, 'rgba(255,200,150,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(d.x, d.y, d.r * 4, 0, PI2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,245,225,0.95)';
+    ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, PI2); ctx.fill();
   }
   ctx.restore();
 }
@@ -593,19 +638,19 @@ function drawFlies(dt) {
     f.x += (vnoise(f.nx) - 0.5) * 26 * dt + 4 * dt;
     f.y += (vnoise(f.ny) - 0.5) * 22 * dt;
     if (f.x < -20) f.x = W + 20; if (f.x > W + 20) f.x = -20;
-    if (f.y < horizon - 60) f.y = horizon - 60;
-    if (f.y > H * 0.97) f.y = H * 0.97;
+    if (f.y < horizon - 50) f.y = horizon - 50;
+    if (f.y > H * 0.95) f.y = H * 0.95;
     const blink = Math.pow(0.5 + 0.5 * Math.sin(t * f.blink + f.ph), 2.5);
-    const a = blink * 0.9;
+    const a = blink * 0.8;
     if (a < 0.02) continue;
     const glow = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r * 7);
-    glow.addColorStop(0, `hsla(${f.hue},90%,75%,${a})`);
-    glow.addColorStop(0.4, `hsla(${f.hue},90%,65%,${a*0.3})`);
-    glow.addColorStop(1, `hsla(${f.hue},90%,60%,0)`);
+    glow.addColorStop(0, `hsla(${f.hue},95%,78%,${a})`);
+    glow.addColorStop(0.4, `hsla(${f.hue},95%,66%,${a*0.3})`);
+    glow.addColorStop(1, `hsla(${f.hue},95%,60%,0)`);
     ctx.fillStyle = glow;
-    ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 7, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = `hsla(${f.hue},95%,88%,${a})`;
-    ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 7, 0, PI2); ctx.fill();
+    ctx.fillStyle = `hsla(${f.hue},98%,90%,${a})`;
+    ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, PI2); ctx.fill();
   }
   ctx.restore();
 }
@@ -617,19 +662,17 @@ function drawReeds() {
     const topY = baseY - r.h;
     const swayX = Math.sin(t * r.sway + r.ph) * (8 * r.bend)
                 + Math.sin(t * 0.3 + r.ph) * 3;
-    // gradient stalk — near-black with a faint cool rim
-    ctx.strokeStyle = `hsl(210, 25%, ${4 + r.shade * 4}%)`;
+    ctx.strokeStyle = `hsl(320, 22%, ${4 + r.shade * 4}%)`;
     ctx.lineWidth = r.w;
     ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(r.x, baseY);
     ctx.quadraticCurveTo(r.x + swayX * 0.4, (baseY + topY) / 2, r.x + swayX, topY);
     ctx.stroke();
-    // seed head
     if (r.head) {
-      ctx.fillStyle = `hsl(30, 20%, ${8 + r.shade * 5}%)`;
+      ctx.fillStyle = `hsl(28, 30%, ${8 + r.shade * 5}%)`;
       ctx.beginPath();
-      ctx.ellipse(r.x + swayX, topY, r.w * 1.4, r.h * 0.06, 0, 0, Math.PI * 2);
+      ctx.ellipse(r.x + swayX, topY, r.w * 1.4, r.h * 0.06, 0, 0, PI2);
       ctx.fill();
     }
   }
@@ -647,20 +690,15 @@ function frame(now) {
   last = now;
   t += dt;
 
-  placeMoon();
+  placeSun();
 
-  // paint
   drawSky();
-  drawStars();
-
-  nextShoot -= dt;
-  if (nextShoot <= 0) { spawnShoot(); nextShoot = rand(9, 22); }
-  drawShootStars(dt);
-
-  drawMoon();
+  drawClouds(dt);
+  drawSun();
   drawRidges();
   drawMist(dt);
   drawWater(dt);
+  drawSplash(dt);
   drawFlies(dt);
   drawReeds();
 
@@ -676,9 +714,7 @@ const Sound = (() => {
   let actx = null, master = null, wet = null, ready = false, muted = false;
   let droneGain = null, convolver = null;
 
-  // a warm, slightly bittersweet chord (Dmaj9-ish, low)
   const chordHz = [73.42, 110.0, 146.83, 220.0, 329.63]; // D2 A2 D3 A3 E4
-  // pentatonic notes for chimes (D major pentatonic, a few octaves)
   const penta = [293.66, 329.63, 369.99, 440.0, 493.88,
                  587.33, 659.25, 739.99, 880.0, 987.77];
 
@@ -705,7 +741,6 @@ const Sound = (() => {
     master.gain.value = 0.0;
     master.connect(actx.destination);
 
-    // reverb send
     convolver = actx.createConvolver();
     convolver.buffer = makeReverbIR(4.5, 2.2);
     wet = actx.createGain();
@@ -713,7 +748,6 @@ const Sound = (() => {
     convolver.connect(wet);
     wet.connect(master);
 
-    // ---- DRONE: detuned oscillator pairs per chord tone, filtered ----
     droneGain = actx.createGain();
     droneGain.gain.value = 0.16;
     const droneFilter = actx.createBiquadFilter();
@@ -724,7 +758,6 @@ const Sound = (() => {
     droneFilter.connect(master);
     droneFilter.connect(convolver);
 
-    // slow filter sweep — the "breathing"
     const lfo = actx.createOscillator();
     const lfoGain = actx.createGain();
     lfo.frequency.value = 0.045;
@@ -739,9 +772,7 @@ const Sound = (() => {
         o.frequency.value = hz;
         o.detune.value = det * 100;
         const g = actx.createGain();
-        // higher tones quieter
         g.gain.value = 0.5 / (idx + 1.4);
-        // gentle independent amplitude shimmer
         const ag = actx.createOscillator();
         const agg = actx.createGain();
         ag.frequency.value = 0.05 + idx * 0.017 + det;
@@ -753,7 +784,6 @@ const Sound = (() => {
       });
     });
 
-    // ---- WIND/WATER: filtered pink-ish noise, slowly modulated ----
     const noiseBuf = actx.createBuffer(1, actx.sampleRate * 4, actx.sampleRate);
     const nd = noiseBuf.getChannelData(0);
     let b0=0,b1=0,b2=0;
@@ -774,7 +804,6 @@ const Sound = (() => {
     nGain.gain.value = 0.06;
     noise.connect(nFilter); nFilter.connect(nGain); nGain.connect(master);
     nGain.connect(convolver);
-    // slow swell of the wind
     const nLfo = actx.createOscillator();
     const nLfoG = actx.createGain();
     nLfo.frequency.value = 0.07;
@@ -797,7 +826,6 @@ const Sound = (() => {
     const o = actx.createOscillator();
     o.type = 'sine';
     o.frequency.value = hz;
-    // a soft second partial for a bell-like body
     const o2 = actx.createOscillator();
     o2.type = 'sine';
     o2.frequency.value = hz * 2.01;
@@ -814,7 +842,6 @@ const Sound = (() => {
     const send = actx.createGain(); send.gain.value = 1;
     g.connect(send); g2.connect(send);
     send.connect(master);
-    // strong reverb on chimes — route into the shared convolver
     const wsend = actx.createGain(); wsend.gain.value = 0.8;
     send.connect(wsend);
     wsend.connect(convolver);
@@ -825,7 +852,6 @@ const Sound = (() => {
   function scheduleChime() {
     if (!ready || muted) { setTimeout(scheduleChime, 1500); return; }
     const now = actx.currentTime;
-    // sometimes a single note, sometimes a gentle pair
     const notes = Math.random() < 0.3 ? 2 : 1;
     for (let i = 0; i < notes; i++) {
       const hz = penta[Math.floor(Math.random() * penta.length)];
@@ -834,27 +860,37 @@ const Sound = (() => {
     setTimeout(scheduleChime, rand(4500, 11000));
   }
 
-  // a soft water "plip" — a quick downward pitch drop with a bright tail.
-  // bigger ripples (higher vel) read a touch lower & rounder, but stay quiet.
+  // a soft water "plunk" — quick downward pitch drop plus a low body,
+  // fuller for bigger ripples but still gentle.
   function drip(pan, vel) {
     if (!ready || muted || !actx) return;
     const v = clamp(vel == null ? 0.5 : vel, 0, 1);
     const now = actx.currentTime;
+    const out = actx.createGain();
+    const peak = 0.03 + v * 0.05;
+    out.gain.setValueAtTime(0, now);
+    out.gain.linearRampToValueAtTime(peak, now + 0.01);
+    out.gain.exponentialRampToValueAtTime(0.0001, now + 0.7);
+    const p = actx.createStereoPanner ? actx.createStereoPanner() : null;
+    if (p) { p.pan.value = clamp((pan - 0.5) * 1.4, -1, 1); out.connect(p); p.connect(master); p.connect(convolver); }
+    else { out.connect(master); out.connect(convolver); }
+    // main plip
     const o = actx.createOscillator();
     o.type = 'sine';
-    const f0 = rand(620, 980) * (1 - v * 0.3);   // deeper plip for larger ripples
+    const f0 = rand(600, 940) * (1 - v * 0.35);
     o.frequency.setValueAtTime(f0, now);
-    o.frequency.exponentialRampToValueAtTime(f0 * 0.45, now + 0.16);
-    const g = actx.createGain();
-    const peak = 0.025 + v * 0.035;              // quiet & subtle
-    g.gain.setValueAtTime(0, now);
-    g.gain.linearRampToValueAtTime(peak, now + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.6);
-    const p = actx.createStereoPanner ? actx.createStereoPanner() : null;
-    o.connect(g);
-    if (p) { p.pan.value = clamp((pan - 0.5) * 1.4, -1, 1); g.connect(p); p.connect(master); p.connect(convolver); }
-    else { g.connect(master); g.connect(convolver); }
-    o.start(now); o.stop(now + 0.7);
+    o.frequency.exponentialRampToValueAtTime(f0 * 0.42, now + 0.17);
+    o.connect(out);
+    // low body for the bigger splashes
+    const ob = actx.createOscillator();
+    ob.type = 'sine';
+    const bg = actx.createGain();
+    bg.gain.value = 0.5 * v;
+    ob.frequency.setValueAtTime(f0 * 0.5, now);
+    ob.frequency.exponentialRampToValueAtTime(f0 * 0.28, now + 0.2);
+    ob.connect(bg); bg.connect(out);
+    o.start(now); ob.start(now);
+    o.stop(now + 0.75); ob.stop(now + 0.75);
   }
 
   function start() {
@@ -884,9 +920,8 @@ const Sound = (() => {
    BOOT
    ============================================================ */
 resize();
-// draw one still frame behind the gate so the reveal is gentle
-placeMoon();
-drawSky(); drawStars(); drawMoon(); drawRidges(); drawMist(0); drawWater(); drawReeds();
+placeSun();
+drawSky(); drawClouds(0); drawSun(); drawRidges(); drawMist(0); drawWater(0); drawReeds();
 
 const gate = document.getElementById('gate');
 const enter = document.getElementById('enter');
@@ -905,8 +940,8 @@ function begin() {
 enter.addEventListener('click', begin);
 gate.addEventListener('click', (e) => { if (e.target === gate) begin(); });
 
-/* ----- touch / mouse: drag the moon, or hold on the water to charge a ripple ----- */
-let draggingMoon = false;
+/* ----- touch / mouse: drag the sun, or hold on the water for a ripple ----- */
+let draggingSun = false;
 function pointerPos(e) {
   const r = canvas.getBoundingClientRect();
   const src = e.touches ? e.touches[0] : e;
@@ -915,9 +950,9 @@ function pointerPos(e) {
 function onDown(e) {
   if (!running) return;
   const p = pointerPos(e);
-  const onMoon = Math.hypot(p.x - moon.x, p.y - moon.y) < moon.r * 1.7;
-  if (onMoon) {
-    draggingMoon = true;
+  const onSun = Math.hypot(p.x - sun.x, p.y - sun.y) < sun.r * 1.8;
+  if (onSun) {
+    draggingSun = true;
   } else if (p.y > horizon + 2) {
     charging = true; chargeStart = t; chargeX = p.x; chargeY = p.y;
   }
@@ -926,9 +961,9 @@ function onDown(e) {
 function onMove(e) {
   if (!running) return;
   const p = pointerPos(e);
-  if (draggingMoon) {
-    moon.x = clamp(p.x, moon.r, W - moon.r);
-    moon.y = clamp(p.y, moon.r, horizon - moon.r * 0.4);
+  if (draggingSun) {
+    sun.x = p.x;            // clamped in placeSun
+    sun.y = p.y;
     e.preventDefault();
   } else if (charging) {
     chargeX = p.x;
@@ -937,12 +972,9 @@ function onMove(e) {
   }
 }
 function onUp() {
-  if (charging) {
-    const hold = t - chargeStart;
-    spawnRipple(chargeX, chargeY, hold);
-  }
+  if (charging) spawnRipple(chargeX, chargeY, t - chargeStart, false);
   charging = false;
-  draggingMoon = false;
+  draggingSun = false;
 }
 canvas.addEventListener('mousedown', onDown);
 canvas.addEventListener('mousemove', onMove);
