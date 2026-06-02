@@ -404,7 +404,7 @@ function drawMist(dt) {
   ctx.restore();
 }
 
-function drawWater() {
+function drawWater(dt0) {
   // base water gradient (mirror of sky, darker & cooler)
   const g = ctx.createLinearGradient(0, horizon, 0, H);
   g.addColorStop(0, 'hsl(205, 40%, 18%)');
@@ -431,41 +431,105 @@ function drawWater() {
 
   drawMoonReflection();
   drawRipples();
+  drawInteractiveRipples(dt0);
 }
 
 function drawMoonReflection() {
-  // shimmering column of light from the moon down to the foreground
+  // A natural moonpath: narrow beneath the moon, fanning toward the viewer,
+  // with a soft Gaussian falloff at the edges (no hard column).
   const cx = moon.x;
   const top = horizon;
   const bottom = H;
-  ctx.save();
-  // soft glow column
-  const colW = moon.r * 1.6;
-  const cg = ctx.createLinearGradient(0, top, 0, bottom);
-  cg.addColorStop(0, 'rgba(225,232,255,0.20)');
-  cg.addColorStop(0.5, 'rgba(200,214,255,0.07)');
-  cg.addColorStop(1, 'rgba(200,214,255,0)');
-  ctx.fillStyle = cg;
-  ctx.fillRect(cx - colW, top, colW * 2, bottom - top);
+  const span = bottom - top;
 
-  // horizontal shimmer dashes — the classic broken moonpath
+  // the path widens with depth (perspective) — measured in half-widths
+  const wNear = moon.r * 0.55;            // at the horizon, about the moon's width
+  const wFar  = moon.r * 3.6;             // near the viewer, fanned out
+  const halfWidthAt = (depth) => wNear + (wFar - wNear) * depth * depth;
+
+  ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  const rows = Math.ceil((bottom - top) / 6);
+
+  const rowH = 5;
+  const rows = Math.ceil(span / rowH);
   for (let i = 0; i < rows; i++) {
-    const y = top + i * 6 + 3;
-    const depth = (y - top) / (bottom - top);
-    const spread = colW * (0.5 + depth * 2.2);     // widens as it nears us
-    const phase = t * (1.0 + depth * 1.5);
-    // a few shimmering segments per row
-    const segs = 3 + Math.floor(depth * 4);
+    const y = top + i * rowH + rowH * 0.5;
+    const depth = (y - top) / span;
+    const hw = halfWidthAt(depth);
+    const phase = t * (0.8 + depth * 1.4);
+
+    // 1) soft underlying glow for this row — a horizontal gradient that
+    //    fades to nothing at the edges, so the path has no visible border.
+    const rowAlpha = (0.12 * (1 - depth * 0.65));
+    const g = ctx.createLinearGradient(cx - hw, 0, cx + hw, 0);
+    g.addColorStop(0.0, 'rgba(205,218,255,0)');
+    g.addColorStop(0.5, `rgba(210,222,255,${rowAlpha})`);
+    g.addColorStop(1.0, 'rgba(205,218,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(cx - hw, y - rowH * 0.5, hw * 2, rowH + 0.5);
+
+    // 2) broken shimmer dashes, denser near the center, weighted by a
+    //    Gaussian of their horizontal offset so the path edges dissolve.
+    const segs = 4 + Math.floor(depth * 6);
     for (let sgi = 0; sgi < segs; sgi++) {
       const n = vnoise(i * 0.7 + sgi * 13.1 + phase);
-      const sx = cx + (n - 0.5) * spread * 2;
+      const off = (n - 0.5) * 2 * hw;              // horizontal offset from center
+      const gauss = Math.exp(-(off * off) / (2 * (hw * 0.5) * (hw * 0.5)));
       const flick = 0.5 + 0.5 * Math.sin(phase * 3 + sgi * 2.1 + i * 0.3);
-      const w = (4 + n * 14) * (0.6 + depth);
-      const a = (0.06 + 0.12 * flick) * (1 - depth * 0.5);
-      ctx.fillStyle = `rgba(235,240,255,${a})`;
-      ctx.fillRect(sx - w/2, y - 1, w, 2);
+      const w = (3 + n * 12) * (0.5 + depth);
+      const a = (0.05 + 0.16 * flick) * gauss * (1 - depth * 0.35);
+      if (a < 0.01) continue;
+      ctx.fillStyle = `rgba(238,243,255,${a})`;
+      ctx.fillRect(cx + off - w / 2, y - 1, w, 2);
+    }
+  }
+  ctx.restore();
+}
+
+/* ----- interactive ripples from touch / click ----- */
+let ripples = [];
+function spawnRipple(px, py) {
+  if (py < horizon + 2) return;            // only on the water
+  const depth = (py - horizon) / (H - horizon);
+  ripples.push({
+    x: px, y: py,
+    life: 0,
+    max: rand(2.6, 3.4),
+    maxR: rand(70, 120) * (0.6 + depth),   // bigger when closer to viewer
+    squash: 0.22 + depth * 0.30,           // vertical flatten from perspective
+  });
+  if (ripples.length > 40) ripples.shift();
+  Sound.drip(px / W);
+}
+function drawInteractiveRipples(dt) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = ripples.length - 1; i >= 0; i--) {
+    const r = ripples[i];
+    r.life += dt;
+    const k = r.life / r.max;
+    if (k >= 1) { ripples.splice(i, 1); continue; }
+    const ease = 1 - Math.pow(1 - k, 2);   // fast then slow expansion
+    const baseR = ease * r.maxR;
+    const fade = (1 - k) * (1 - k);
+    // three concentric rings trailing the leading edge
+    for (let ring = 0; ring < 3; ring++) {
+      const rr = baseR - ring * 13;
+      if (rr <= 2) continue;
+      const a = fade * (0.20 - ring * 0.05);
+      if (a <= 0.005) continue;
+      ctx.strokeStyle = `rgba(200,222,255,${a})`;
+      ctx.lineWidth = Math.max(0.6, 1.6 - ring * 0.4);
+      ctx.beginPath();
+      ctx.ellipse(r.x, r.y, rr, rr * r.squash, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    // a soft bright pip at the very center while young
+    if (k < 0.25) {
+      ctx.fillStyle = `rgba(225,235,255,${(0.25 - k) * 1.4})`;
+      ctx.beginPath();
+      ctx.ellipse(r.x, r.y, 3, 3 * r.squash, 0, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
   ctx.restore();
@@ -567,7 +631,7 @@ function frame(now) {
   drawMoon();
   drawRidges();
   drawMist(dt);
-  drawWater();
+  drawWater(dt);
   drawFlies(dt);
   drawReeds();
 
@@ -741,6 +805,26 @@ const Sound = (() => {
     setTimeout(scheduleChime, rand(4500, 11000));
   }
 
+  // a soft water "plip" — a quick downward pitch drop with a bright tail
+  function drip(pan) {
+    if (!ready || muted || !actx) return;
+    const now = actx.currentTime;
+    const o = actx.createOscillator();
+    o.type = 'sine';
+    const f0 = rand(680, 1050);
+    o.frequency.setValueAtTime(f0, now);
+    o.frequency.exponentialRampToValueAtTime(f0 * 0.45, now + 0.14);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(0.10, now + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
+    const p = actx.createStereoPanner ? actx.createStereoPanner() : null;
+    o.connect(g);
+    if (p) { p.pan.value = clamp((pan - 0.5) * 1.4, -1, 1); g.connect(p); p.connect(master); p.connect(convolver); }
+    else { g.connect(master); g.connect(convolver); }
+    o.start(now); o.stop(now + 0.55);
+  }
+
   function start() {
     init();
     if (!actx) return;
@@ -761,7 +845,7 @@ const Sound = (() => {
     fade(muted ? 0.0 : 0.9, muted ? 1.2 : 2.5);
     return muted;
   }
-  return { start, toggle };
+  return { start, toggle, drip };
 })();
 
 /* ============================================================
@@ -788,6 +872,39 @@ function begin() {
 }
 enter.addEventListener('click', begin);
 gate.addEventListener('click', (e) => { if (e.target === gate) begin(); });
+
+/* ----- touch / mouse on the water makes ripples ----- */
+let pressing = false, lastRippleT = 0;
+function pointerPos(e) {
+  const r = canvas.getBoundingClientRect();
+  const src = e.touches ? e.touches[0] : e;
+  return { x: src.clientX - r.left, y: src.clientY - r.top };
+}
+function onDown(e) {
+  if (!running) return;
+  pressing = true;
+  const p = pointerPos(e);
+  spawnRipple(p.x, p.y);
+  lastRippleT = t;
+  e.preventDefault();
+}
+function onMove(e) {
+  if (!running || !pressing) return;
+  // trail ripples while dragging, throttled so it stays calm
+  if (t - lastRippleT > 0.10) {
+    const p = pointerPos(e);
+    spawnRipple(p.x, p.y);
+    lastRippleT = t;
+  }
+  e.preventDefault();
+}
+function onUp() { pressing = false; }
+canvas.addEventListener('mousedown', onDown);
+canvas.addEventListener('mousemove', onMove);
+window.addEventListener('mouseup', onUp);
+canvas.addEventListener('touchstart', onDown, { passive: false });
+canvas.addEventListener('touchmove', onMove, { passive: false });
+window.addEventListener('touchend', onUp);
 
 muteBtn.addEventListener('click', () => {
   const m = Sound.toggle();
