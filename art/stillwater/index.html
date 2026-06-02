@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Stillwater · a tranquil place</title>
+<style>
+  :root { color-scheme: dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #05060c;
+    overflow: hidden;
+    font-family: ui-serif, Georgia, "Times New Roman", serif;
+    -webkit-tap-highlight-color: transparent;
+    cursor: default;
+  }
+  #scene { display: block; width: 100vw; height: 100vh; }
+
+  /* Soft vignette over everything */
+  #vignette {
+    position: fixed; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse 120% 90% at 50% 42%,
+      rgba(0,0,0,0) 55%, rgba(0,0,0,0.35) 100%);
+    mix-blend-mode: multiply;
+  }
+
+  /* Entry overlay — needed for audio to start, and sets a calm tone */
+  #gate {
+    position: fixed; inset: 0; z-index: 10;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 1.6rem;
+    background: radial-gradient(ellipse at 50% 40%, #0b1022 0%, #05060c 70%);
+    color: #cdd6f0; text-align: center;
+    transition: opacity 2.4s ease;
+  }
+  #gate h1 {
+    font-weight: 400; font-size: clamp(2rem, 6vw, 3.4rem);
+    letter-spacing: 0.18em; opacity: 0.92;
+    text-shadow: 0 0 30px rgba(140,170,255,0.25);
+  }
+  #gate p {
+    font-size: clamp(0.85rem, 2.4vw, 1.05rem);
+    letter-spacing: 0.08em; opacity: 0.55; font-style: italic;
+    max-width: 32ch; line-height: 1.7;
+  }
+  #enter {
+    margin-top: 0.6rem;
+    border: 1px solid rgba(180,200,255,0.35);
+    background: rgba(180,200,255,0.04);
+    color: #dde6ff;
+    padding: 0.85rem 2.4rem; border-radius: 999px;
+    font-family: inherit; font-size: 0.95rem; letter-spacing: 0.22em;
+    cursor: pointer; transition: all 0.6s ease;
+    backdrop-filter: blur(2px);
+  }
+  #enter:hover {
+    background: rgba(180,200,255,0.12);
+    border-color: rgba(200,215,255,0.6);
+    box-shadow: 0 0 40px rgba(150,180,255,0.2);
+  }
+  #gate.hidden { opacity: 0; pointer-events: none; }
+
+  /* tiny, unobtrusive sound toggle */
+  #mute {
+    position: fixed; right: 18px; bottom: 16px; z-index: 9;
+    width: 34px; height: 34px; border-radius: 50%;
+    border: 1px solid rgba(190,205,255,0.2);
+    background: rgba(10,14,28,0.35);
+    color: rgba(205,214,240,0.7);
+    font-size: 15px; cursor: pointer; backdrop-filter: blur(3px);
+    display: none; align-items: center; justify-content: center;
+    transition: opacity 1.2s ease, background 0.4s;
+    opacity: 0.3;
+  }
+  #mute:hover { opacity: 0.9; background: rgba(20,26,48,0.6); }
+</style>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+  <div id="vignette"></div>
+  <button id="mute" title="sound">♪</button>
+
+  <div id="gate">
+    <h1>Stillwater</h1>
+    <p>A quiet lake under the moon.<br>Stay as long as you like.</p>
+    <button id="enter">B&nbsp;&nbsp;E&nbsp;&nbsp;G&nbsp;&nbsp;I&nbsp;&nbsp;N</button>
+  </div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   STILLWATER — a tranquil moonlit lake
+   Layered 2D canvas painting with living, never-repeating motion,
+   paired with a generative ambient soundscape.
+   ============================================================ */
+
+const canvas = document.getElementById('scene');
+const ctx = canvas.getContext('2d');
+
+let W = 0, H = 0, DPR = 1;
+let horizon = 0;          // y of the waterline
+let t = 0;                // seconds of elapsed dream-time
+
+/* ---- a gentle deterministic-ish noise helpers ---- */
+function rand(a, b) { return a + Math.random() * (b - a); }
+function lerp(a, b, x) { return a + (b - a) * x; }
+function clamp(x, a, b) { return x < a ? a : x > b ? b : x; }
+// smooth value noise for organic drift
+function hash(n){ const s = Math.sin(n) * 43758.5453123; return s - Math.floor(s); }
+function vnoise(x){
+  const i = Math.floor(x), f = x - i;
+  const u = f*f*(3-2*f);
+  return lerp(hash(i), hash(i+1), u);
+}
+
+/* ============================================================
+   STAR FIELD
+   ============================================================ */
+let stars = [];
+function buildStars() {
+  stars = [];
+  const count = Math.round((W * H) / 9000);
+  for (let i = 0; i < count; i++) {
+    const y = rand(0, horizon * 0.96);
+    // stars thin out near the horizon, brighter & sparser up high
+    stars.push({
+      x: rand(0, W),
+      y,
+      r: rand(0.4, 1.5) * (0.6 + (1 - y / horizon) * 0.8),
+      base: rand(0.25, 0.9),
+      tw: rand(0.3, 1.4),        // twinkle speed
+      ph: rand(0, Math.PI * 2),  // twinkle phase
+      hue: rand(200, 230),
+      sat: rand(10, 40),
+    });
+  }
+}
+
+/* ============================================================
+   SHOOTING STARS — rare, slow, gentle
+   ============================================================ */
+let shootStars = [];
+let nextShoot = rand(7, 16);
+function spawnShoot() {
+  const x = rand(W * 0.1, W * 0.9);
+  const y = rand(horizon * 0.1, horizon * 0.5);
+  const ang = rand(Math.PI * 0.12, Math.PI * 0.32); // shallow downward
+  const dir = Math.random() < 0.5 ? 1 : -1;
+  const speed = rand(220, 360);
+  shootStars.push({
+    x, y,
+    vx: Math.cos(ang) * speed * dir,
+    vy: Math.sin(ang) * speed,
+    life: 0, max: rand(0.9, 1.6),
+    len: rand(60, 130),
+  });
+}
+
+/* ============================================================
+   MIST BANDS — soft horizontal fog drifting over the water/hills
+   ============================================================ */
+let mist = [];
+function buildMist() {
+  mist = [];
+  for (let i = 0; i < 5; i++) {
+    mist.push({
+      y: horizon - rand(-10, 60) - i * 8,
+      x: rand(0, W),
+      speed: rand(4, 11) * (Math.random() < 0.5 ? 1 : -1),
+      amp: rand(10, 26),
+      h: rand(40, 90),
+      alpha: rand(0.04, 0.10),
+    });
+  }
+}
+
+/* ============================================================
+   FIREFLIES — wandering glow near the foreground
+   ============================================================ */
+let flies = [];
+function buildFlies() {
+  flies = [];
+  const n = Math.round(W / 90) + 6;
+  for (let i = 0; i < n; i++) {
+    flies.push({
+      x: rand(0, W),
+      y: rand(horizon - 40, H * 0.92),
+      nx: rand(0, 1000), ny: rand(0, 1000),  // noise seeds
+      r: rand(1.1, 2.4),
+      hue: rand(48, 70),
+      blink: rand(0.4, 1.1),
+      ph: rand(0, Math.PI * 2),
+    });
+  }
+}
+
+/* ============================================================
+   REEDS — foreground silhouettes swaying at the water's edge
+   ============================================================ */
+let reeds = [];
+function buildReeds() {
+  reeds = [];
+  const n = Math.round(W / 38) + 6;
+  for (let i = 0; i < n; i++) {
+    const x = rand(-20, W + 20);
+    reeds.push({
+      x,
+      h: rand(H * 0.14, H * 0.34),
+      w: rand(2, 4.5),
+      sway: rand(0.5, 1.3),
+      ph: rand(0, Math.PI * 2),
+      bend: rand(0.3, 0.9) * (Math.random() < 0.5 ? 1 : -1),
+      head: Math.random() < 0.55,  // seed head?
+      shade: rand(0, 1),
+    });
+  }
+}
+
+/* distant mountain ridge — generated once as a path */
+let ridges = [];
+function buildRidges() {
+  ridges = [];
+  for (let layer = 0; layer < 3; layer++) {
+    const pts = [];
+    const seg = 14 + layer * 4;
+    const baseY = horizon - 8 - layer * 0;
+    const height = (40 - layer * 10);
+    for (let i = 0; i <= seg; i++) {
+      const x = (i / seg) * W;
+      const n = vnoise(i * 0.6 + layer * 31.7) + vnoise(i * 1.7 + layer * 11.3) * 0.5;
+      pts.push({ x, y: baseY - n * height - layer * 6 });
+    }
+    ridges.push({ pts, layer });
+  }
+}
+
+/* ============================================================
+   RESIZE
+   ============================================================ */
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = Math.round(W * DPR);
+  canvas.height = Math.round(H * DPR);
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  horizon = H * 0.52;
+  buildStars();
+  buildMist();
+  buildFlies();
+  buildReeds();
+  buildRidges();
+}
+window.addEventListener('resize', resize);
+
+/* moon position (kept in one place, reflection mirrors it) */
+const moon = { x: 0, y: 0, r: 0 };
+function placeMoon() {
+  moon.x = W * 0.70;
+  moon.y = horizon * 0.42;
+  moon.r = clamp(Math.min(W, H) * 0.055, 28, 80);
+}
+
+/* ============================================================
+   DRAWING
+   ============================================================ */
+
+function drawSky() {
+  // slow hue breathing across the whole night
+  const shift = Math.sin(t * 0.012) * 6;
+  const g = ctx.createLinearGradient(0, 0, 0, horizon);
+  g.addColorStop(0.00, `hsl(${230 + shift}, 48%, 7%)`);
+  g.addColorStop(0.45, `hsl(${226 + shift}, 45%, 11%)`);
+  g.addColorStop(0.78, `hsl(${218 + shift}, 42%, 16%)`);
+  g.addColorStop(1.00, `hsl(${205 + shift}, 38%, 22%)`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, horizon);
+}
+
+function drawStars() {
+  ctx.save();
+  for (const s of stars) {
+    const tw = 0.55 + 0.45 * Math.sin(t * s.tw + s.ph);
+    const a = clamp(s.base * tw, 0, 1);
+    ctx.globalAlpha = a;
+    ctx.fillStyle = `hsl(${s.hue}, ${s.sat}%, 92%)`;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fill();
+    // soft glow for the brighter ones
+    if (s.r > 1.1) {
+      ctx.globalAlpha = a * 0.18;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r * 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+function drawShootStars(dt) {
+  for (let i = shootStars.length - 1; i >= 0; i--) {
+    const sh = shootStars[i];
+    sh.life += dt;
+    sh.x += sh.vx * dt;
+    sh.y += sh.vy * dt;
+    const k = sh.life / sh.max;
+    if (k >= 1) { shootStars.splice(i, 1); continue; }
+    const a = Math.sin(k * Math.PI) * 0.9;  // fade in then out
+    const tx = sh.x - sh.vx * (sh.len / 340);
+    const ty = sh.y - sh.vy * (sh.len / 340);
+    const grad = ctx.createLinearGradient(sh.x, sh.y, tx, ty);
+    grad.addColorStop(0, `rgba(255,255,255,${a})`);
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 1.6;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(sh.x, sh.y);
+    ctx.lineTo(tx, ty);
+    ctx.stroke();
+  }
+}
+
+function drawMoon() {
+  const { x, y, r } = moon;
+  // outer halo
+  const halo = ctx.createRadialGradient(x, y, r * 0.5, x, y, r * 6);
+  halo.addColorStop(0, 'rgba(225,232,255,0.30)');
+  halo.addColorStop(0.25, 'rgba(190,205,255,0.12)');
+  halo.addColorStop(1, 'rgba(190,205,255,0)');
+  ctx.fillStyle = halo;
+  ctx.beginPath(); ctx.arc(x, y, r * 6, 0, Math.PI * 2); ctx.fill();
+
+  // disc
+  const disc = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.2, x, y, r);
+  disc.addColorStop(0, '#fdfdf6');
+  disc.addColorStop(0.7, '#e7ecfa');
+  disc.addColorStop(1, '#c3cbe6');
+  ctx.fillStyle = disc;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+
+  // faint craters / maria
+  ctx.save();
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.clip();
+  ctx.globalAlpha = 0.10;
+  ctx.fillStyle = '#9aa6c8';
+  const craters = [[-0.25,-0.15,0.28],[0.22,0.1,0.22],[0.05,0.35,0.16],[-0.35,0.28,0.13],[0.38,-0.28,0.12]];
+  for (const c of craters) {
+    ctx.beginPath();
+    ctx.arc(x + c[0]*r, y + c[1]*r, c[2]*r, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawRidges() {
+  // layered silhouettes, darker/closer as layer increases
+  for (const rg of ridges) {
+    const l = rg.layer;
+    ctx.beginPath();
+    ctx.moveTo(0, horizon);
+    ctx.lineTo(rg.pts[0].x, rg.pts[0].y);
+    for (let i = 1; i < rg.pts.length; i++) {
+      const p = rg.pts[i], pr = rg.pts[i-1];
+      const mx = (p.x + pr.x) / 2, my = (p.y + pr.y) / 2;
+      ctx.quadraticCurveTo(pr.x, pr.y, mx, my);
+    }
+    ctx.lineTo(W, horizon);
+    ctx.closePath();
+    const shade = 9 + l * 3;
+    ctx.fillStyle = `hsl(220, 35%, ${shade}%)`;
+    ctx.fill();
+  }
+}
+
+function drawMist(dt) {
+  ctx.save();
+  for (const m of mist) {
+    m.x += m.speed * dt;
+    const yy = m.y + Math.sin(t * 0.2 + m.x * 0.001) * 4;
+    const g = ctx.createLinearGradient(0, yy - m.h/2, 0, yy + m.h/2);
+    g.addColorStop(0, `rgba(200,212,235,0)`);
+    g.addColorStop(0.5, `rgba(205,216,238,${m.alpha})`);
+    g.addColorStop(1, `rgba(200,212,235,0)`);
+    ctx.fillStyle = g;
+    // a soft wavy band spanning the width
+    ctx.beginPath();
+    ctx.moveTo(0, yy);
+    for (let x = 0; x <= W; x += 40) {
+      const wy = yy + Math.sin((x + m.x) * 0.004 + m.ph) * m.amp * 0.25;
+      ctx.lineTo(x, wy);
+    }
+    ctx.lineTo(W, yy + m.h);
+    ctx.lineTo(0, yy + m.h);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawWater() {
+  // base water gradient (mirror of sky, darker & cooler)
+  const g = ctx.createLinearGradient(0, horizon, 0, H);
+  g.addColorStop(0, 'hsl(205, 40%, 18%)');
+  g.addColorStop(0.25, 'hsl(214, 42%, 12%)');
+  g.addColorStop(1, 'hsl(225, 48%, 5%)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, horizon, W, H - horizon);
+
+  // reflected stars — faint, wobbling
+  ctx.save();
+  for (const s of stars) {
+    if (s.r < 0.9) continue;
+    const ry = horizon + (horizon - s.y) * 0.5;
+    if (ry > H) continue;
+    const wob = Math.sin(t * 1.3 + s.x * 0.05) * 1.5;
+    const tw = 0.55 + 0.45 * Math.sin(t * s.tw + s.ph);
+    ctx.globalAlpha = s.base * tw * 0.22;
+    ctx.fillStyle = '#cfe0ff';
+    ctx.beginPath();
+    ctx.arc(s.x + wob, ry, s.r * 0.8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  drawMoonReflection();
+  drawRipples();
+}
+
+function drawMoonReflection() {
+  // shimmering column of light from the moon down to the foreground
+  const cx = moon.x;
+  const top = horizon;
+  const bottom = H;
+  ctx.save();
+  // soft glow column
+  const colW = moon.r * 1.6;
+  const cg = ctx.createLinearGradient(0, top, 0, bottom);
+  cg.addColorStop(0, 'rgba(225,232,255,0.20)');
+  cg.addColorStop(0.5, 'rgba(200,214,255,0.07)');
+  cg.addColorStop(1, 'rgba(200,214,255,0)');
+  ctx.fillStyle = cg;
+  ctx.fillRect(cx - colW, top, colW * 2, bottom - top);
+
+  // horizontal shimmer dashes — the classic broken moonpath
+  ctx.globalCompositeOperation = 'lighter';
+  const rows = Math.ceil((bottom - top) / 6);
+  for (let i = 0; i < rows; i++) {
+    const y = top + i * 6 + 3;
+    const depth = (y - top) / (bottom - top);
+    const spread = colW * (0.5 + depth * 2.2);     // widens as it nears us
+    const phase = t * (1.0 + depth * 1.5);
+    // a few shimmering segments per row
+    const segs = 3 + Math.floor(depth * 4);
+    for (let sgi = 0; sgi < segs; sgi++) {
+      const n = vnoise(i * 0.7 + sgi * 13.1 + phase);
+      const sx = cx + (n - 0.5) * spread * 2;
+      const flick = 0.5 + 0.5 * Math.sin(phase * 3 + sgi * 2.1 + i * 0.3);
+      const w = (4 + n * 14) * (0.6 + depth);
+      const a = (0.06 + 0.12 * flick) * (1 - depth * 0.5);
+      ctx.fillStyle = `rgba(235,240,255,${a})`;
+      ctx.fillRect(sx - w/2, y - 1, w, 2);
+    }
+  }
+  ctx.restore();
+}
+
+function drawRipples() {
+  // faint moving highlight lines across the whole lake for life
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 26; i++) {
+    const depth = i / 26;
+    const y = horizon + depth * depth * (H - horizon);
+    const drift = Math.sin(t * 0.5 + i * 0.8) * 12;
+    const a = 0.012 + 0.02 * (1 - depth);
+    ctx.strokeStyle = `rgba(180,205,255,${a})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 0; x <= W; x += 28) {
+      const yy = y + Math.sin(x * 0.012 + t * 0.7 + i) * (1.5 + depth * 3) + drift * 0.1;
+      if (x === 0) ctx.moveTo(x, yy); else ctx.lineTo(x, yy);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawFlies(dt) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (const f of flies) {
+    f.nx += dt * 0.12; f.ny += dt * 0.12;
+    f.x += (vnoise(f.nx) - 0.5) * 26 * dt + 4 * dt;
+    f.y += (vnoise(f.ny) - 0.5) * 22 * dt;
+    if (f.x < -20) f.x = W + 20; if (f.x > W + 20) f.x = -20;
+    if (f.y < horizon - 60) f.y = horizon - 60;
+    if (f.y > H * 0.97) f.y = H * 0.97;
+    const blink = Math.pow(0.5 + 0.5 * Math.sin(t * f.blink + f.ph), 2.5);
+    const a = blink * 0.9;
+    if (a < 0.02) continue;
+    const glow = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r * 7);
+    glow.addColorStop(0, `hsla(${f.hue},90%,75%,${a})`);
+    glow.addColorStop(0.4, `hsla(${f.hue},90%,65%,${a*0.3})`);
+    glow.addColorStop(1, `hsla(${f.hue},90%,60%,0)`);
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 7, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = `hsla(${f.hue},95%,88%,${a})`;
+    ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawReeds() {
+  ctx.save();
+  for (const r of reeds) {
+    const baseY = H + 4;
+    const topY = baseY - r.h;
+    const swayX = Math.sin(t * r.sway + r.ph) * (8 * r.bend)
+                + Math.sin(t * 0.3 + r.ph) * 3;
+    // gradient stalk — near-black with a faint cool rim
+    ctx.strokeStyle = `hsl(210, 25%, ${4 + r.shade * 4}%)`;
+    ctx.lineWidth = r.w;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(r.x, baseY);
+    ctx.quadraticCurveTo(r.x + swayX * 0.4, (baseY + topY) / 2, r.x + swayX, topY);
+    ctx.stroke();
+    // seed head
+    if (r.head) {
+      ctx.fillStyle = `hsl(30, 20%, ${8 + r.shade * 5}%)`;
+      ctx.beginPath();
+      ctx.ellipse(r.x + swayX, topY, r.w * 1.4, r.h * 0.06, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+/* ============================================================
+   MAIN LOOP
+   ============================================================ */
+let last = performance.now();
+let running = false;
+
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 0.05);
+  last = now;
+  t += dt;
+
+  placeMoon();
+
+  // paint
+  drawSky();
+  drawStars();
+
+  nextShoot -= dt;
+  if (nextShoot <= 0) { spawnShoot(); nextShoot = rand(9, 22); }
+  drawShootStars(dt);
+
+  drawMoon();
+  drawRidges();
+  drawMist(dt);
+  drawWater();
+  drawFlies(dt);
+  drawReeds();
+
+  requestAnimationFrame(frame);
+}
+
+/* ============================================================
+   GENERATIVE AMBIENT SOUND
+   A soft evolving drone (a held chord), a breath of filtered noise
+   for wind/water, and occasional pentatonic chimes with long tails.
+   ============================================================ */
+const Sound = (() => {
+  let actx = null, master = null, wet = null, ready = false, muted = false;
+  let droneGain = null, convolver = null;
+
+  // a warm, slightly bittersweet chord (Dmaj9-ish, low)
+  const chordHz = [73.42, 110.0, 146.83, 220.0, 329.63]; // D2 A2 D3 A3 E4
+  // pentatonic notes for chimes (D major pentatonic, a few octaves)
+  const penta = [293.66, 329.63, 369.99, 440.0, 493.88,
+                 587.33, 659.25, 739.99, 880.0, 987.77];
+
+  function makeReverbIR(seconds, decay) {
+    const rate = actx.sampleRate;
+    const len = Math.floor(rate * seconds);
+    const buf = actx.createBuffer(2, len, rate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++) {
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+      }
+    }
+    return buf;
+  }
+
+  function init() {
+    if (ready) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    actx = new AC();
+
+    master = actx.createGain();
+    master.gain.value = 0.0;
+    master.connect(actx.destination);
+
+    // reverb send
+    convolver = actx.createConvolver();
+    convolver.buffer = makeReverbIR(4.5, 2.2);
+    wet = actx.createGain();
+    wet.gain.value = 0.55;
+    convolver.connect(wet);
+    wet.connect(master);
+
+    // ---- DRONE: detuned oscillator pairs per chord tone, filtered ----
+    droneGain = actx.createGain();
+    droneGain.gain.value = 0.16;
+    const droneFilter = actx.createBiquadFilter();
+    droneFilter.type = 'lowpass';
+    droneFilter.frequency.value = 600;
+    droneFilter.Q.value = 0.6;
+    droneGain.connect(droneFilter);
+    droneFilter.connect(master);
+    droneFilter.connect(convolver);
+
+    // slow filter sweep — the "breathing"
+    const lfo = actx.createOscillator();
+    const lfoGain = actx.createGain();
+    lfo.frequency.value = 0.045;
+    lfoGain.gain.value = 240;
+    lfo.connect(lfoGain); lfoGain.connect(droneFilter.frequency);
+    lfo.start();
+
+    chordHz.forEach((hz, idx) => {
+      [-0.12, 0.12].forEach(det => {
+        const o = actx.createOscillator();
+        o.type = idx < 2 ? 'sine' : 'triangle';
+        o.frequency.value = hz;
+        o.detune.value = det * 100;
+        const g = actx.createGain();
+        // higher tones quieter
+        g.gain.value = 0.5 / (idx + 1.4);
+        // gentle independent amplitude shimmer
+        const ag = actx.createOscillator();
+        const agg = actx.createGain();
+        ag.frequency.value = 0.05 + idx * 0.017 + det;
+        agg.gain.value = g.gain.value * 0.4;
+        ag.connect(agg); agg.connect(g.gain);
+        ag.start();
+        o.connect(g); g.connect(droneGain);
+        o.start();
+      });
+    });
+
+    // ---- WIND/WATER: filtered pink-ish noise, slowly modulated ----
+    const noiseBuf = actx.createBuffer(1, actx.sampleRate * 4, actx.sampleRate);
+    const nd = noiseBuf.getChannelData(0);
+    let b0=0,b1=0,b2=0;
+    for (let i = 0; i < nd.length; i++) {
+      const white = Math.random() * 2 - 1;
+      b0 = 0.99765*b0 + white*0.0990460;
+      b1 = 0.96300*b1 + white*0.2965164;
+      b2 = 0.57000*b2 + white*1.0526913;
+      nd[i] = (b0 + b1 + b2 + white*0.1848) * 0.12;
+    }
+    const noise = actx.createBufferSource();
+    noise.buffer = noiseBuf; noise.loop = true;
+    const nFilter = actx.createBiquadFilter();
+    nFilter.type = 'bandpass';
+    nFilter.frequency.value = 420;
+    nFilter.Q.value = 0.5;
+    const nGain = actx.createGain();
+    nGain.gain.value = 0.06;
+    noise.connect(nFilter); nFilter.connect(nGain); nGain.connect(master);
+    nGain.connect(convolver);
+    // slow swell of the wind
+    const nLfo = actx.createOscillator();
+    const nLfoG = actx.createGain();
+    nLfo.frequency.value = 0.07;
+    nLfoG.gain.value = 0.035;
+    nLfo.connect(nLfoG); nLfoG.connect(nGain.gain);
+    nLfo.start();
+    const nfLfo = actx.createOscillator();
+    const nfLfoG = actx.createGain();
+    nfLfo.frequency.value = 0.03;
+    nfLfoG.gain.value = 180;
+    nfLfo.connect(nfLfoG); nfLfoG.connect(nFilter.frequency);
+    nfLfo.start();
+    noise.start();
+
+    ready = true;
+    scheduleChime();
+  }
+
+  function chime(hz, when, vel) {
+    const o = actx.createOscillator();
+    o.type = 'sine';
+    o.frequency.value = hz;
+    // a soft second partial for a bell-like body
+    const o2 = actx.createOscillator();
+    o2.type = 'sine';
+    o2.frequency.value = hz * 2.01;
+    const g = actx.createGain();
+    const g2 = actx.createGain();
+    const v = vel * 0.12;
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(v, when + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + 4.5);
+    g2.gain.setValueAtTime(0, when);
+    g2.gain.linearRampToValueAtTime(v * 0.4, when + 0.02);
+    g2.gain.exponentialRampToValueAtTime(0.0001, when + 2.6);
+    o.connect(g); o2.connect(g2);
+    const send = actx.createGain(); send.gain.value = 1;
+    g.connect(send); g2.connect(send);
+    send.connect(master);
+    // strong reverb on chimes — route into the shared convolver
+    const wsend = actx.createGain(); wsend.gain.value = 0.8;
+    send.connect(wsend);
+    wsend.connect(convolver);
+    o.start(when); o2.start(when);
+    o.stop(when + 4.8); o2.stop(when + 2.8);
+  }
+
+  function scheduleChime() {
+    if (!ready || muted) { setTimeout(scheduleChime, 1500); return; }
+    const now = actx.currentTime;
+    // sometimes a single note, sometimes a gentle pair
+    const notes = Math.random() < 0.3 ? 2 : 1;
+    for (let i = 0; i < notes; i++) {
+      const hz = penta[Math.floor(Math.random() * penta.length)];
+      chime(hz, now + i * rand(0.25, 0.8), rand(0.5, 1));
+    }
+    setTimeout(scheduleChime, rand(4500, 11000));
+  }
+
+  function start() {
+    init();
+    if (!actx) return;
+    if (actx.state === 'suspended') actx.resume();
+    fade(0.9, 3.5);
+    muted = false;
+  }
+  function fade(to, secs) {
+    if (!master) return;
+    const now = actx.currentTime;
+    master.gain.cancelScheduledValues(now);
+    master.gain.setValueAtTime(master.gain.value, now);
+    master.gain.linearRampToValueAtTime(to, now + secs);
+  }
+  function toggle() {
+    if (!ready) { start(); return false; }
+    muted = !muted;
+    fade(muted ? 0.0 : 0.9, muted ? 1.2 : 2.5);
+    return muted;
+  }
+  return { start, toggle };
+})();
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+resize();
+// draw one still frame behind the gate so the reveal is gentle
+placeMoon();
+drawSky(); drawStars(); drawMoon(); drawRidges(); drawMist(0); drawWater(); drawReeds();
+
+const gate = document.getElementById('gate');
+const enter = document.getElementById('enter');
+const muteBtn = document.getElementById('mute');
+
+function begin() {
+  if (running) return;
+  running = true;
+  Sound.start();
+  gate.classList.add('hidden');
+  muteBtn.style.display = 'flex';
+  last = performance.now();
+  requestAnimationFrame(frame);
+  setTimeout(() => gate.remove(), 2600);
+}
+enter.addEventListener('click', begin);
+gate.addEventListener('click', (e) => { if (e.target === gate) begin(); });
+
+muteBtn.addEventListener('click', () => {
+  const m = Sound.toggle();
+  muteBtn.textContent = m ? '·' : '♪';
+  muteBtn.style.opacity = m ? '0.25' : '0.5';
+});
+</script>
+</body>
+</html>
