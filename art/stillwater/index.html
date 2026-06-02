@@ -17,7 +17,6 @@
   }
   #scene { display: block; width: 100vw; height: 100vh; }
 
-  /* Soft warm vignette over everything */
   #vignette {
     position: fixed; inset: 0; pointer-events: none;
     background: radial-gradient(ellipse 125% 95% at 50% 46%,
@@ -25,7 +24,6 @@
     mix-blend-mode: multiply;
   }
 
-  /* Entry overlay — needed for audio to start, and sets a calm tone */
   #gate {
     position: fixed; inset: 0; z-index: 10;
     display: flex; flex-direction: column;
@@ -43,7 +41,7 @@
   #gate p {
     font-size: clamp(0.85rem, 2.4vw, 1.05rem);
     letter-spacing: 0.08em; opacity: 0.62; font-style: italic;
-    max-width: 32ch; line-height: 1.7;
+    max-width: 34ch; line-height: 1.7;
   }
   #enter {
     margin-top: 0.6rem;
@@ -62,7 +60,6 @@
   }
   #gate.hidden { opacity: 0; pointer-events: none; }
 
-  /* tiny, unobtrusive sound toggle */
   #mute {
     position: fixed; right: 18px; bottom: 16px; z-index: 9;
     width: 34px; height: 34px; border-radius: 50%;
@@ -84,7 +81,7 @@
 
   <div id="gate">
     <h1>Stillwater</h1>
-    <p>A lake at sunset.<br>Drag the sun. Touch the water.</p>
+    <p>A lake at sunset.<br>Drag the sun. Touch the water — or the sky.</p>
     <button id="enter">B&nbsp;&nbsp;E&nbsp;&nbsp;G&nbsp;&nbsp;I&nbsp;&nbsp;N</button>
   </div>
 
@@ -93,8 +90,6 @@
 
 /* ============================================================
    STILLWATER — a tranquil lake at sunset
-   Layered 2D canvas painting with living, never-repeating motion,
-   paired with a generative ambient soundscape.
    ============================================================ */
 
 const canvas = document.getElementById('scene');
@@ -102,10 +97,9 @@ const ctx = canvas.getContext('2d');
 const PI2 = Math.PI * 2;
 
 let W = 0, H = 0, DPR = 1;
-let horizon = 0;          // y of the waterline
-let t = 0;                // seconds of elapsed dream-time
+let horizon = 0;
+let t = 0;
 
-/* ---- gentle helpers ---- */
 function rand(a, b) { return a + Math.random() * (b - a); }
 function lerp(a, b, x) { return a + (b - a) * x; }
 function clamp(x, a, b) { return x < a ? a : x > b ? b : x; }
@@ -117,35 +111,43 @@ function vnoise(x){
 }
 
 /* ============================================================
-   CLOUDS — soft sunset-lit puffs, pre-rendered once as sprites
+   CLOUDS — soft sunset-lit puffs, pre-rendered with padding so
+   their edges fade out fully (no square clipping).
    ============================================================ */
 let clouds = [];
 function makeCloudSprite() {
-  const w = Math.round(rand(240, 460));
-  const h = Math.round(w * rand(0.30, 0.46));
+  const w0 = rand(180, 360);                 // puff-cluster width
+  const h0 = w0 * rand(0.34, 0.50);          // cluster height
+  const pad = h0 * 0.85;                      // breathing room so gradients reach 0
+  const w = Math.round(w0 + pad * 2);
+  const h = Math.round(h0 + pad * 2);
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
   const x2 = c.getContext('2d');
-  // 1) build a puffy alpha shape from clustered soft blobs
-  const puffs = 6 + Math.floor(Math.random() * 6);
+
+  // build a soft, rounded silhouette from clustered blobs kept clear of edges
+  const puffs = 7 + Math.floor(Math.random() * 6);
   for (let i = 0; i < puffs; i++) {
-    const px = w * (0.10 + 0.80 * (i / (puffs - 1)) + rand(-0.05, 0.05));
-    const py = h * (0.42 + rand(-0.12, 0.40));
-    const pr = h * rand(0.30, 0.58);
+    const u = i / (puffs - 1);
+    const px = pad + w0 * (0.12 + 0.76 * u) + rand(-0.04, 0.04) * w0;
+    // billow on top, flatter base
+    const py = pad + h0 * (0.55 + rand(-0.30, 0.18));
+    const pr = h0 * rand(0.30, 0.52);
     const g = x2.createRadialGradient(px, py, 0, px, py, pr);
     g.addColorStop(0, 'rgba(255,255,255,1)');
-    g.addColorStop(0.6, 'rgba(255,255,255,0.65)');
+    g.addColorStop(0.55, 'rgba(255,255,255,0.6)');
     g.addColorStop(1, 'rgba(255,255,255,0)');
     x2.fillStyle = g;
     x2.beginPath(); x2.arc(px, py, pr, 0, PI2); x2.fill();
   }
-  // 2) recolor the shape with a vertical sunset gradient (lit underside)
+
+  // recolor the shape with a vertical sunset gradient (lit underside)
   x2.globalCompositeOperation = 'source-in';
-  const vg = x2.createLinearGradient(0, 0, 0, h);
-  vg.addColorStop(0.00, 'rgba(108,86,150,0.95)');  // dusky purple top
-  vg.addColorStop(0.42, 'rgba(196,118,158,0.95)'); // mauve
-  vg.addColorStop(0.74, 'rgba(255,162,112,0.96)'); // warm
-  vg.addColorStop(1.00, 'rgba(255,206,150,0.98)'); // glowing underside
+  const vg = x2.createLinearGradient(0, pad * 0.4, 0, h - pad * 0.4);
+  vg.addColorStop(0.00, 'rgba(104,84,148,0.95)');
+  vg.addColorStop(0.42, 'rgba(196,118,158,0.95)');
+  vg.addColorStop(0.74, 'rgba(255,162,112,0.96)');
+  vg.addColorStop(1.00, 'rgba(255,206,150,0.98)');
   x2.fillStyle = vg;
   x2.fillRect(0, 0, w, h);
   return { canvas: c, w, h };
@@ -159,17 +161,16 @@ function buildClouds() {
     clouds.push({
       sprite, scale,
       x: rand(-sprite.w * scale, W),
-      y: rand(H * 0.04, horizon * 0.66),
+      y: rand(H * 0.03, horizon * 0.60),
       speed: rand(1.6, 6.5),
       alpha: rand(0.62, 0.92),
     });
   }
-  // sort so smaller/higher (distant) draw first
   clouds.sort((a, b) => a.scale - b.scale);
 }
 
 /* ============================================================
-   LOW MIST — warm haze hugging the water's edge
+   LOW MIST
    ============================================================ */
 let mist = [];
 function buildMist() {
@@ -187,7 +188,7 @@ function buildMist() {
 }
 
 /* ============================================================
-   GNATS — tiny motes catching the last light over the water
+   GNATS
    ============================================================ */
 let flies = [];
 function buildFlies() {
@@ -207,7 +208,7 @@ function buildFlies() {
 }
 
 /* ============================================================
-   REEDS — foreground silhouettes swaying at the water's edge
+   REEDS
    ============================================================ */
 let reeds = [];
 function buildReeds() {
@@ -227,7 +228,7 @@ function buildReeds() {
   }
 }
 
-/* distant shoreline ridge — generated once */
+/* distant shoreline ridge */
 let ridges = [];
 function buildRidges() {
   ridges = [];
@@ -266,35 +267,32 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
-/* sun position — draggable, but kept low above the horizon.
-   the reflection mirrors sun.x. */
+/* sun — draggable, kept low above the horizon */
 const sun = { x: 0, y: 0, r: 0 };
 let sunInit = false;
 function placeSun() {
   sun.r = clamp(Math.min(W, H) * 0.06, 32, 92);
   if (!sunInit) { sun.x = W * 0.5; sun.y = horizon - sun.r * 0.8; sunInit = true; }
-  // horizontally free; vertically pinned to just above the horizon
   sun.x = clamp(sun.x, 0, W);
-  const highest = horizon - H * 0.16;     // the most it can rise (still low)
-  const lowest  = horizon - sun.r * 0.20; // resting just over the waterline
+  const highest = horizon - H * 0.16;
+  const lowest  = horizon - sun.r * 0.20;
   sun.y = clamp(sun.y, highest, lowest);
 }
 
 /* ============================================================
-   DRAWING — SKY
+   SKY
    ============================================================ */
 function drawSky() {
   const breathe = Math.sin(t * 0.02) * 4;
   const g = ctx.createLinearGradient(0, 0, 0, horizon);
-  g.addColorStop(0.00, `hsl(${244 + breathe}, 46%, 20%)`);  // deep blue-violet zenith
-  g.addColorStop(0.30, `hsl(${278 + breathe}, 44%, 30%)`);  // purple
-  g.addColorStop(0.55, `hsl(${326 + breathe}, 52%, 42%)`);  // magenta-rose
-  g.addColorStop(0.76, `hsl(${18  + breathe}, 78%, 54%)`);  // orange
-  g.addColorStop(1.00, `hsl(${40  + breathe}, 88%, 62%)`);  // golden horizon
+  g.addColorStop(0.00, `hsl(${244 + breathe}, 46%, 20%)`);
+  g.addColorStop(0.30, `hsl(${278 + breathe}, 44%, 30%)`);
+  g.addColorStop(0.55, `hsl(${326 + breathe}, 52%, 42%)`);
+  g.addColorStop(0.76, `hsl(${18  + breathe}, 78%, 54%)`);
+  g.addColorStop(1.00, `hsl(${40  + breathe}, 88%, 62%)`);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, horizon);
 
-  // a broad warm haze localized around the sun's column
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   const glow = ctx.createRadialGradient(sun.x, horizon, sun.r * 0.5, sun.x, horizon, Math.max(W, H) * 0.55);
@@ -313,7 +311,6 @@ function drawClouds(dt) {
     c.x += c.speed * dt;
     const sw = c.sprite.w * c.scale, sh = c.sprite.h * c.scale;
     if (c.x > W + 20) c.x = -sw - 20;
-    // gentle vertical drift
     const yy = c.y + Math.sin(t * 0.1 + c.x * 0.002) * 4;
     ctx.globalAlpha = c.alpha;
     ctx.drawImage(c.sprite.canvas, c.x, yy, sw, sh);
@@ -326,7 +323,6 @@ function drawSun() {
   const { x, y, r } = sun;
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  // wide radiant halo
   const halo = ctx.createRadialGradient(x, y, r * 0.4, x, y, r * 9);
   halo.addColorStop(0, 'rgba(255,224,160,0.50)');
   halo.addColorStop(0.14, 'rgba(255,170,95,0.30)');
@@ -336,7 +332,6 @@ function drawSun() {
   ctx.beginPath(); ctx.arc(x, y, r * 9, 0, PI2); ctx.fill();
   ctx.restore();
 
-  // disc
   const disc = ctx.createRadialGradient(x, y - r * 0.15, r * 0.1, x, y, r);
   disc.addColorStop(0, '#fff7e6');
   disc.addColorStop(0.5, '#ffd884');
@@ -389,30 +384,26 @@ function drawMist(dt) {
 }
 
 /* ============================================================
-   DRAWING — WATER
+   WATER
    ============================================================ */
 function drawWater(dt) {
-  // base water gradient — reflects the sunset, deepening with distance
   const g = ctx.createLinearGradient(0, horizon, 0, H);
-  g.addColorStop(0.00, 'hsl(36, 78%, 50%)');   // bright at the waterline
+  g.addColorStop(0.00, 'hsl(36, 78%, 50%)');
   g.addColorStop(0.12, 'hsl(20, 62%, 38%)');
-  g.addColorStop(0.40, 'hsl(322, 42%, 27%)');  // plum
+  g.addColorStop(0.40, 'hsl(322, 42%, 27%)');
   g.addColorStop(0.72, 'hsl(268, 46%, 17%)');
-  g.addColorStop(1.00, 'hsl(248, 52%, 9%)');   // deep foreground
+  g.addColorStop(1.00, 'hsl(248, 52%, 9%)');
   ctx.fillStyle = g;
   ctx.fillRect(0, horizon, W, H - horizon);
 
-  // reflections live below the waterline
   ctx.save();
-  ctx.beginPath();
-  ctx.rect(0, horizon, W, H - horizon);
-  ctx.clip();
+  ctx.beginPath(); ctx.rect(0, horizon, W, H - horizon); ctx.clip();
   drawCloudReflections();
   ctx.restore();
 
   drawSunReflection();
   drawAmbientRipples();
-  drawInteractiveRipples(dt);
+  drawRipples(false);   // ripples on the water
 }
 
 function drawCloudReflections() {
@@ -433,8 +424,6 @@ function drawCloudReflections() {
 }
 
 function drawSunReflection() {
-  // a warm sunpath: narrow beneath the sun, fanning toward the viewer,
-  // with a soft Gaussian falloff at the edges (no hard column).
   const cx = sun.x;
   const top = horizon;
   const span = H - top;
@@ -452,7 +441,6 @@ function drawSunReflection() {
     const hw = halfWidthAt(depth);
     const phase = t * (0.8 + depth * 1.4);
 
-    // soft underlying warm glow for this row (edges fade to nothing)
     const rowAlpha = 0.16 * (1 - depth * 0.6);
     const g = ctx.createLinearGradient(cx - hw, 0, cx + hw, 0);
     g.addColorStop(0.0, 'rgba(255,190,110,0)');
@@ -461,7 +449,6 @@ function drawSunReflection() {
     ctx.fillStyle = g;
     ctx.fillRect(cx - hw, y - rowH * 0.5, hw * 2, rowH + 0.5);
 
-    // broken shimmer glints, denser & brighter near the center line
     const segs = 4 + Math.floor(depth * 6);
     for (let sgi = 0; sgi < segs; sgi++) {
       const n = vnoise(i * 0.7 + sgi * 13.1 + phase);
@@ -479,7 +466,6 @@ function drawSunReflection() {
 }
 
 function drawAmbientRipples() {
-  // faint moving highlight lines across the whole lake for life
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   for (let i = 0; i < 26; i++) {
@@ -500,133 +486,140 @@ function drawAmbientRipples() {
 }
 
 /* ============================================================
-   INTERACTIVE RIPPLES + SPLASH DROPLETS
-   Real radiating wavefronts: several rings spread out over time,
-   even from a quick tap. Holding charges a bigger disturbance.
+   RIPPLES — radiating 3D wavefronts (embossed crest + trough),
+   on the water and, when you touch the sky, in the sky too.
    ============================================================ */
 const HOLD_MAX = 2.0;
 let ripples = [];
-let drops = [];
-let charging = false, chargeStart = 0, chargeX = 0, chargeY = 0;
+let charging = false, chargeStart = 0, chargeX = 0, chargeY = 0, chargeSky = false;
 
-function spawnRipple(px, py, hold, secondary) {
-  if (py < horizon + 2) return;
-  const depth = (py - horizon) / (H - horizon);
-  if (secondary) {
-    ripples.push({
-      x: px, y: py, life: 0, max: 1.6,
-      maxR: rand(26, 60) * (0.6 + depth), squash: 0.20 + depth * 0.30,
-      fronts: 2, interval: 0.16, strength: 0.5,
-    });
-    return;
-  }
+function spawnRipple(px, py, hold, sky) {
   const holdK = clamp((hold || 0) / HOLD_MAX, 0, 1);
-  // even a tap is sizeable; holding grows it considerably
-  const size = 160 + holdK * 440;
-  ripples.push({
-    x: px, y: py, life: 0,
-    max: 2.6 + holdK * 3.0,
-    maxR: size * (0.55 + depth),
-    squash: 0.20 + depth * 0.30,
-    fronts: 3 + Math.round(holdK * 5),     // many radiating rings
-    interval: 0.17,
-    strength: 0.75 + holdK * 0.35,
-  });
-  if (ripples.length > 48) ripples.shift();
-
-  // a burst of droplets thrown up by the impact
-  const n = Math.round(3 + holdK * 9);
-  for (let i = 0; i < n; i++) {
-    const ang = rand(0, PI2);
-    const spd = rand(40, 130) * (0.7 + holdK);
-    drops.push({
-      x: px, y: py, y0: py,
-      vx: Math.cos(ang) * spd * 0.55,
-      vy: -rand(140, 320) * (0.5 + holdK * 0.9),
-      squash: 0.20 + depth * 0.30,
-      r: rand(1.2, 2.6),
+  if (sky) {
+    ripples.push({
+      x: px, y: py, life: 0,
+      max: 2.4 + holdK * 2.6,
+      maxR: 110 + holdK * 360,
+      squash: 0.80,                       // nearly circular — a vertical "screen" plane
+      fronts: 3 + Math.round(holdK * 4),
+      interval: 0.17,
+      strength: 0.55 + holdK * 0.30,
+      sky: true,
     });
+    Sound.airy(px / W, 0.4 + holdK * 0.5);
+  } else {
+    if (py < horizon + 2) return;
+    const depth = (py - horizon) / (H - horizon);
+    ripples.push({
+      x: px, y: py, life: 0,
+      max: 2.6 + holdK * 3.0,
+      maxR: (160 + holdK * 440) * (0.55 + depth),
+      squash: 0.18 + depth * 0.30,        // flat on the water plane (perspective)
+      fronts: 3 + Math.round(holdK * 5),
+      interval: 0.17,
+      strength: 0.75 + holdK * 0.35,
+      sky: false,
+    });
+    Sound.drip(px / W, 0.4 + holdK * 0.5);
   }
-  if (drops.length > 240) drops.splice(0, drops.length - 240);
-
-  Sound.drip(px / W, 0.4 + holdK * 0.5);
+  if (ripples.length > 60) ripples.shift();
 }
 
-function drawInteractiveRipples(dt) {
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
+function updateRipples(dt) {
   for (let i = ripples.length - 1; i >= 0; i--) {
-    const r = ripples[i];
-    r.life += dt;
-    const k = r.life / r.max;
-    if (k >= 1) { ripples.splice(i, 1); continue; }
-    const overall = (1 - k);               // whole-event fade
-    const frontDur = r.max * 0.85;
-    for (let j = 0; j < r.fronts; j++) {
-      const fl = r.life - j * r.interval;  // this wavefront's age
-      if (fl <= 0) continue;
-      const fk = fl / frontDur;
-      if (fk >= 1) continue;
-      const ease = 1 - Math.pow(1 - fk, 2.2);
-      const rr = ease * r.maxR;
-      if (rr <= 1) continue;
-      const a = r.strength * Math.pow(1 - fk, 1.3) * 0.22 * overall;
-      if (a <= 0.004) continue;
-      ctx.strokeStyle = `rgba(255,231,196,${a})`;
-      ctx.lineWidth = Math.max(0.6, 2.4 * (1 - fk));
-      ctx.beginPath();
-      ctx.ellipse(r.x, r.y, rr, rr * r.squash, 0, 0, PI2);
-      ctx.stroke();
-    }
-    // bright impact pip at the very center while young
-    if (k < 0.18) {
-      const a = (0.18 - k) * 1.4;
-      ctx.fillStyle = `rgba(255,240,210,${a})`;
-      ctx.beginPath();
-      ctx.ellipse(r.x, r.y, 4, 4 * r.squash, 0, 0, PI2);
-      ctx.fill();
-    }
+    ripples[i].life += dt;
+    if (ripples[i].life / ripples[i].max >= 1) ripples.splice(i, 1);
+  }
+}
+
+// one ripple, drawn as a set of embossed rings to read as raised 3D water
+function renderRipple(r) {
+  const k = r.life / r.max;
+  const overall = 1 - k;
+  const frontDur = r.max * 0.85;
+  const lit = r.sky ? '255,242,216' : '255,232,196';
+  const shd = r.sky ? '64,38,86' : '26,12,32';
+
+  for (let j = 0; j < r.fronts; j++) {
+    const fl = r.life - j * r.interval;
+    if (fl <= 0) continue;
+    const fk = fl / frontDur;
+    if (fk >= 1) continue;
+    const ease = 1 - Math.pow(1 - fk, 2.2);
+    const rr = ease * r.maxR;
+    if (rr <= 1) continue;
+    const a = r.strength * Math.pow(1 - fk, 1.3) * 0.5 * overall;
+    if (a <= 0.004) continue;
+    const w = Math.max(0.8, 3.0 * (1 - fk));   // crest thins as it spreads
+    const d = Math.max(1, w * 0.6);            // emboss offset = the wave's height
+
+    // trough shadow (lower/near face of the wave) — darkens the surface
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.lineWidth = w;
+    ctx.strokeStyle = `rgba(${shd},${a * 0.5})`;
+    ctx.beginPath();
+    ctx.ellipse(r.x, r.y + d, rr, rr * r.squash, 0, 0, PI2);
+    ctx.stroke();
+
+    // crest highlight (upper/sky-facing face) — catches the light
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(${lit},${a})`;
+    ctx.beginPath();
+    ctx.ellipse(r.x, r.y - d, rr, rr * r.squash, 0, 0, PI2);
+    ctx.stroke();
+  }
+
+  // the impact itself — a small dome that rises then collapses (depth at center)
+  if (k < 0.30) {
+    const kk = k / 0.30;
+    const dr = (1 - kk) * (r.maxR * 0.11 + 6);
+    // shadow cast under the bulge
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = `rgba(${shd},${0.22 * (1 - kk)})`;
+    ctx.beginPath();
+    ctx.ellipse(r.x, r.y + dr * 0.45, dr, dr * r.squash, 0, 0, PI2);
+    ctx.fill();
+    // lit crown of the bulge
+    ctx.globalCompositeOperation = 'lighter';
+    const dg = ctx.createRadialGradient(r.x, r.y - dr * 0.3, 0, r.x, r.y - dr * 0.2, dr * 1.5);
+    dg.addColorStop(0, `rgba(${lit},${0.55 * (1 - kk)})`);
+    dg.addColorStop(1, `rgba(${lit},0)`);
+    ctx.fillStyle = dg;
+    ctx.beginPath();
+    ctx.ellipse(r.x, r.y - dr * 0.2, dr * 1.5, dr * 1.5 * r.squash, 0, 0, PI2);
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function drawRipples(sky) {
+  ctx.save();
+  // keep each plane's ripples within its own region
+  ctx.beginPath();
+  if (sky) ctx.rect(0, 0, W, horizon);
+  else ctx.rect(0, horizon, W, H - horizon);
+  ctx.clip();
+
+  for (const r of ripples) {
+    if (!!r.sky !== sky) continue;
+    renderRipple(r);
   }
 
   // preview ring while holding
-  if (charging) {
+  if (charging && chargeSky === sky) {
     const hold = clamp(t - chargeStart, 0, HOLD_MAX);
     const holdK = hold / HOLD_MAX;
-    const depth = (chargeY - horizon) / (H - horizon);
-    const rr = (12 + holdK * 80) * (0.55 + depth);
-    const squash = 0.20 + depth * 0.30;
-    const a = 0.08 + 0.12 * holdK + 0.03 * Math.sin(t * 5);
-    ctx.strokeStyle = `rgba(255,224,180,${a})`;
-    ctx.lineWidth = 1.2;
+    const squash = sky ? 0.80 : (0.18 + ((chargeY - horizon) / (H - horizon)) * 0.30);
+    const rr = (12 + holdK * 80) * (sky ? 1 : 0.7);
+    const a = 0.10 + 0.12 * holdK + 0.03 * Math.sin(t * 5);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(255,228,188,${a})`;
+    ctx.lineWidth = 1.4;
     ctx.beginPath();
     ctx.ellipse(chargeX, chargeY, rr, rr * squash, 0, 0, PI2);
     ctx.stroke();
   }
-  ctx.restore();
-}
-
-function drawSplash(dt) {
-  if (!drops.length) return;
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  for (let i = drops.length - 1; i >= 0; i--) {
-    const d = drops[i];
-    d.vy += 620 * dt;                 // gravity
-    d.x += d.vx * dt;
-    d.y += d.vy * dt;
-    if (d.vy > 0 && d.y >= d.y0) {     // fallen back to the surface
-      spawnRipple(d.x, d.y0, 0, true); // a small secondary ring
-      drops.splice(i, 1);
-      continue;
-    }
-    const glow = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, d.r * 4);
-    glow.addColorStop(0, 'rgba(255,236,200,0.9)');
-    glow.addColorStop(1, 'rgba(255,200,150,0)');
-    ctx.fillStyle = glow;
-    ctx.beginPath(); ctx.arc(d.x, d.y, d.r * 4, 0, PI2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,245,225,0.95)';
-    ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, PI2); ctx.fill();
-  }
+  ctx.globalCompositeOperation = 'source-over';
   ctx.restore();
 }
 
@@ -691,14 +684,15 @@ function frame(now) {
   t += dt;
 
   placeSun();
+  updateRipples(dt);
 
   drawSky();
   drawClouds(dt);
+  drawRipples(true);     // ripples in the sky, over the clouds
   drawSun();
   drawRidges();
   drawMist(dt);
-  drawWater(dt);
-  drawSplash(dt);
+  drawWater(dt);         // includes water ripples
   drawFlies(dt);
   drawReeds();
 
@@ -707,14 +701,12 @@ function frame(now) {
 
 /* ============================================================
    GENERATIVE AMBIENT SOUND
-   A soft evolving drone (a held chord), a breath of filtered noise
-   for wind/water, and occasional pentatonic chimes with long tails.
    ============================================================ */
 const Sound = (() => {
   let actx = null, master = null, wet = null, ready = false, muted = false;
   let droneGain = null, convolver = null;
 
-  const chordHz = [73.42, 110.0, 146.83, 220.0, 329.63]; // D2 A2 D3 A3 E4
+  const chordHz = [73.42, 110.0, 146.83, 220.0, 329.63];
   const penta = [293.66, 329.63, 369.99, 440.0, 493.88,
                  587.33, 659.25, 739.99, 880.0, 987.77];
 
@@ -860,8 +852,7 @@ const Sound = (() => {
     setTimeout(scheduleChime, rand(4500, 11000));
   }
 
-  // a soft water "plunk" — quick downward pitch drop plus a low body,
-  // fuller for bigger ripples but still gentle.
+  // water "plunk" for ripples on the lake
   function drip(pan, vel) {
     if (!ready || muted || !actx) return;
     const v = clamp(vel == null ? 0.5 : vel, 0, 1);
@@ -874,14 +865,12 @@ const Sound = (() => {
     const p = actx.createStereoPanner ? actx.createStereoPanner() : null;
     if (p) { p.pan.value = clamp((pan - 0.5) * 1.4, -1, 1); out.connect(p); p.connect(master); p.connect(convolver); }
     else { out.connect(master); out.connect(convolver); }
-    // main plip
     const o = actx.createOscillator();
     o.type = 'sine';
     const f0 = rand(600, 940) * (1 - v * 0.35);
     o.frequency.setValueAtTime(f0, now);
     o.frequency.exponentialRampToValueAtTime(f0 * 0.42, now + 0.17);
     o.connect(out);
-    // low body for the bigger splashes
     const ob = actx.createOscillator();
     ob.type = 'sine';
     const bg = actx.createGain();
@@ -891,6 +880,33 @@ const Sound = (() => {
     ob.connect(bg); bg.connect(out);
     o.start(now); ob.start(now);
     o.stop(now + 0.75); ob.stop(now + 0.75);
+  }
+
+  // airy shimmer for ripples in the sky
+  function airy(pan, vel) {
+    if (!ready || muted || !actx) return;
+    const v = clamp(vel == null ? 0.5 : vel, 0, 1);
+    const now = actx.currentTime;
+    const out = actx.createGain();
+    const peak = 0.018 + v * 0.03;
+    out.gain.setValueAtTime(0, now);
+    out.gain.linearRampToValueAtTime(peak, now + 0.10);
+    out.gain.exponentialRampToValueAtTime(0.0001, now + 1.4);
+    const p = actx.createStereoPanner ? actx.createStereoPanner() : null;
+    if (p) { p.pan.value = clamp((pan - 0.5) * 1.4, -1, 1); out.connect(p); p.connect(master); p.connect(convolver); }
+    else { out.connect(master); out.connect(convolver); }
+    // two shimmering partials gliding upward
+    [1, 1.5].forEach((mult, i) => {
+      const o = actx.createOscillator();
+      o.type = 'sine';
+      const f = rand(760, 1080) * mult;
+      o.frequency.setValueAtTime(f, now);
+      o.frequency.linearRampToValueAtTime(f * 1.4, now + 0.7);
+      const g = actx.createGain();
+      g.gain.value = i === 0 ? 1 : 0.45;
+      o.connect(g); g.connect(out);
+      o.start(now); o.stop(now + 1.5);
+    });
   }
 
   function start() {
@@ -913,7 +929,7 @@ const Sound = (() => {
     fade(muted ? 0.0 : 0.9, muted ? 1.2 : 2.5);
     return muted;
   }
-  return { start, toggle, drip };
+  return { start, toggle, drip, airy };
 })();
 
 /* ============================================================
@@ -940,7 +956,7 @@ function begin() {
 enter.addEventListener('click', begin);
 gate.addEventListener('click', (e) => { if (e.target === gate) begin(); });
 
-/* ----- touch / mouse: drag the sun, or hold on the water for a ripple ----- */
+/* ----- touch / mouse: drag the sun, or hold to ripple water or sky ----- */
 let draggingSun = false;
 function pointerPos(e) {
   const r = canvas.getBoundingClientRect();
@@ -953,8 +969,9 @@ function onDown(e) {
   const onSun = Math.hypot(p.x - sun.x, p.y - sun.y) < sun.r * 1.8;
   if (onSun) {
     draggingSun = true;
-  } else if (p.y > horizon + 2) {
+  } else {
     charging = true; chargeStart = t; chargeX = p.x; chargeY = p.y;
+    chargeSky = p.y < horizon;             // pressing the sky vs the water
   }
   e.preventDefault();
 }
@@ -962,17 +979,17 @@ function onMove(e) {
   if (!running) return;
   const p = pointerPos(e);
   if (draggingSun) {
-    sun.x = p.x;            // clamped in placeSun
-    sun.y = p.y;
+    sun.x = p.x; sun.y = p.y;              // clamped in placeSun
     e.preventDefault();
   } else if (charging) {
     chargeX = p.x;
-    chargeY = clamp(p.y, horizon + 2, H);
+    chargeY = p.y;
+    chargeSky = p.y < horizon;
     e.preventDefault();
   }
 }
 function onUp() {
-  if (charging) spawnRipple(chargeX, chargeY, t - chargeStart, false);
+  if (charging) spawnRipple(chargeX, chargeY, t - chargeStart, chargeSky);
   charging = false;
   draggingSun = false;
 }
