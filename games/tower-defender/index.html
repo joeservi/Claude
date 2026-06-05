@@ -125,26 +125,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowShadowMap;
 
 const scene = new THREE.Scene();
-// Create a night sky background with many visible stars
-const skyCanvas = document.createElement('canvas');
-skyCanvas.width = 1024; skyCanvas.height = 1024;
-const skyCtx = skyCanvas.getContext('2d');
-const skyGrad = skyCtx.createLinearGradient(0, 0, 0, 1024);
-skyGrad.addColorStop(0, '#000814');    // very dark at top
-skyGrad.addColorStop(0.4, '#001a33');  // darker blue
-skyGrad.addColorStop(1, '#0a1f3a');    // slightly lighter at bottom (horizon)
-skyCtx.fillStyle = skyGrad;
-skyCtx.fillRect(0, 0, 1024, 1024);
-// Add bright, clearly visible stars
-skyCtx.fillStyle = '#ffffff';
-for (let i = 0; i < 400; i++) {
-  const x = Math.random() * 1024, y = Math.random() * 1024, r = Math.random() * 2.0 + 0.5;
-  skyCtx.globalAlpha = Math.random() * 0.6 + 0.4;  // brighter stars
-  skyCtx.beginPath(); skyCtx.arc(x, y, r, 0, Math.PI * 2); skyCtx.fill();
-}
-skyCtx.globalAlpha = 1;
-const skyTexture = new THREE.CanvasTexture(skyCanvas);
-scene.background = skyTexture;
+scene.background = new THREE.Color(0x000814); // solid night sky color
 scene.fog = new THREE.Fog(0x1a2a4a, 42, 110); // fog transitioning to battlefield color
 
 // Steep angled overview (more overhead, less forward) looking into the field.
