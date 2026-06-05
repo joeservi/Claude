@@ -125,7 +125,26 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowShadowMap;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x050810); // much darker background to differentiate from battlefield
+// Create a canvas-based night sky background with stars
+const skyCanvas = document.createElement('canvas');
+skyCanvas.width = 512; skyCanvas.height = 512;
+const skyCtx = skyCanvas.getContext('2d');
+const skyGrad = skyCtx.createLinearGradient(0, 0, 0, 512);
+skyGrad.addColorStop(0, '#0a0d18');
+skyGrad.addColorStop(0.5, '#0d1a2a');
+skyGrad.addColorStop(1, '#1a1e2e');
+skyCtx.fillStyle = skyGrad;
+skyCtx.fillRect(0, 0, 512, 512);
+// Add subtle stars to the background
+skyCtx.fillStyle = '#ffffff';
+for (let i = 0; i < 200; i++) {
+  const x = Math.random() * 512, y = Math.random() * 512, r = Math.random() * 1.2;
+  skyCtx.globalAlpha = Math.random() * 0.8 + 0.2;
+  skyCtx.beginPath(); skyCtx.arc(x, y, r, 0, Math.PI * 2); skyCtx.fill();
+}
+skyCtx.globalAlpha = 1;
+const skyTexture = new THREE.CanvasTexture(skyCanvas);
+scene.background = skyTexture;
 scene.fog = new THREE.Fog(0x1a2a4a, 42, 110); // fog transitioning to battlefield color
 
 // Steep angled overview (more overhead, less forward) looking into the field.
@@ -134,7 +153,7 @@ scene.fog = new THREE.Fog(0x1a2a4a, 42, 110); // fog transitioning to battlefiel
 // to the top (higher horizon, narrower from perspective). Tuned so the wall fills
 // the portrait width with a small cushion while the whole battlefield stays in frame.
 const camera = new THREE.PerspectiveCamera(74, 1, 0.1, 220);
-camera.position.set(0, 52, 14.4); // ~20% zoom in (1.2x closer)
+camera.position.set(0, 52, 12); // more zoom in (~33% closer)
 camera.lookAt(0, 2, -32);
 
 let composer, bloom;
@@ -382,17 +401,11 @@ mainTurret.group.position.set(0, 0, WALL_Z);
 scene.add(mainTurret.group);
 
 // Aim line
-const aimLineMat = new THREE.LineBasicMaterial({ color: 0xffed78, linewidth: 4, transparent: true, opacity: 0.8, fog: false });
+const aimLineMat = new THREE.LineBasicMaterial({ color: 0xffed78, linewidth: 2, transparent: true, opacity: 0.4, fog: false });
 const aimLineGeo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(2*3), 3));
 const aimLine = new THREE.Line(aimLineGeo, aimLineMat);
 aimLine.layers.set(0); aimLine.frustumCulled = false;
 scene.add(aimLine);
-// sight line glow (a tube around the laser sight for depth)
-const glowMat = new THREE.LineBasicMaterial({ color: 0xfff9b8, linewidth: 18, transparent: true, opacity: 0.15, fog: false });
-const glowGeo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(2*3), 3));
-const aimGlow = new THREE.Line(glowGeo, glowMat);
-aimGlow.layers.set(0); aimGlow.frustumCulled = false;
-scene.add(aimGlow);
 
 const game = {
   coins: 0, wave: 0, bestWave: 0,
@@ -489,8 +502,8 @@ function spawnEnemy() {
   const baseRewardPerWave = ECONOMY.baseWaveCoins + game.wave * ECONOMY.coinPerWave;
   const reward = Math.round(baseRewardPerWave / Math.max(1, spawnQueue.length));
 
-  // Size proportional to HP: radius scales with cube root so volume ~ HP (~20% bigger)
-  const r = Math.max(0.9, Math.min(3.6, 0.6 * Math.cbrt(hp)));
+  // Size proportional to HP: radius scales with cube root so volume ~ HP (significantly bigger)
+  const r = Math.max(0.9, Math.min(3.6, 0.75 * Math.cbrt(hp)));
 
   // Speed: smaller enemies are faster; speeds increase significantly each wave
   const baseSpeed = 5.0 + game.wave * 0.35;
@@ -576,9 +589,9 @@ function fireAuto(t) {
 }
 
 function getTargetDifficultyRatio(wave) {
-  // Difficulty ratio: 1.2 at wave 1, linearly falling to 0.8 by wave 10, then constant
-  if (wave >= 10) return 0.8;
-  return 1.2 - ((wave - 1) * 0.4 / 9);
+  // Difficulty ratio: 1.2 at wave 1, linearly falling to 0.9 by wave 10, then constant
+  if (wave >= 10) return 0.9;
+  return 1.2 - ((wave - 1) * 0.3 / 9);
 }
 
 function calculateWaveDurationExact(queue, wave) {
@@ -858,11 +871,6 @@ function update(dt) {
   aimPos[0] = m.x; aimPos[1] = m.y; aimPos[2] = m.z;
   aimPos[3] = m.x + dir*rayLen; aimPos[4] = m.y; aimPos[5] = m.z + dirFwd*rayLen;
   aimLine.geometry.attributes.position.needsUpdate = true;
-  // update glow sight line
-  const glowPos = aimGlow.geometry.attributes.position.array;
-  glowPos[0] = m.x; glowPos[1] = m.y; glowPos[2] = m.z;
-  glowPos[3] = m.x + dir*rayLen; glowPos[4] = m.y; glowPos[5] = m.z + dirFwd*rayLen;
-  aimGlow.geometry.attributes.position.needsUpdate = true;
 
   const hpFrac = Math.max(0, game.hp / game.maxHp);
   hpBar.scale.x = Math.max(0.001, hpFrac);
