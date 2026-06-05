@@ -125,8 +125,8 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowShadowMap;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1a2a4a);
-scene.fog = new THREE.Fog(0x1a2a4a, 42, 110);
+scene.background = new THREE.Color(0x050810); // much darker background to differentiate from battlefield
+scene.fog = new THREE.Fog(0x1a2a4a, 42, 110); // fog transitioning to battlefield color
 
 // Steep angled overview (more overhead, less forward) looking into the field.
 // Camera sits high & above the player side; the WALL (Z=0) lands near the BOTTOM
@@ -134,7 +134,7 @@ scene.fog = new THREE.Fog(0x1a2a4a, 42, 110);
 // to the top (higher horizon, narrower from perspective). Tuned so the wall fills
 // the portrait width with a small cushion while the whole battlefield stays in frame.
 const camera = new THREE.PerspectiveCamera(74, 1, 0.1, 220);
-camera.position.set(0, 52, 18);
+camera.position.set(0, 52, 14.4); // ~20% zoom in (1.2x closer)
 camera.lookAt(0, 2, -32);
 
 let composer, bloom;
@@ -245,7 +245,7 @@ const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 240), groundMat);
 ground.rotation.x = -Math.PI / 2; ground.position.z = -48; ground.receiveShadow = true;
 scene.add(ground);
 
-scene.add(new THREE.GridHelper(200, 80, 0x4a8aff, 0x1a3a70));
+scene.add(new THREE.GridHelper(200, 80, 0x5a8aff, 0x0f1f40)); // brighter grid for better battlefield definition
 
 const railMat = new THREE.MeshBasicMaterial({ color: 0x3effff });
 for (const sx of [-1, 1]) {
@@ -382,11 +382,17 @@ mainTurret.group.position.set(0, 0, WALL_Z);
 scene.add(mainTurret.group);
 
 // Aim line
-const aimLineMat = new THREE.LineBasicMaterial({ color: 0xffed78, linewidth: 3, transparent: true, opacity: 0.6, fog: false });
+const aimLineMat = new THREE.LineBasicMaterial({ color: 0xffed78, linewidth: 4, transparent: true, opacity: 0.8, fog: false });
 const aimLineGeo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(2*3), 3));
 const aimLine = new THREE.Line(aimLineGeo, aimLineMat);
 aimLine.layers.set(0); aimLine.frustumCulled = false;
 scene.add(aimLine);
+// sight line glow (a tube around the laser sight for depth)
+const glowMat = new THREE.LineBasicMaterial({ color: 0xfff9b8, linewidth: 18, transparent: true, opacity: 0.15, fog: false });
+const glowGeo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(2*3), 3));
+const aimGlow = new THREE.Line(glowGeo, glowMat);
+aimGlow.layers.set(0); aimGlow.frustumCulled = false;
+scene.add(aimGlow);
 
 const game = {
   coins: 0, wave: 0, bestWave: 0,
@@ -483,8 +489,8 @@ function spawnEnemy() {
   const baseRewardPerWave = ECONOMY.baseWaveCoins + game.wave * ECONOMY.coinPerWave;
   const reward = Math.round(baseRewardPerWave / Math.max(1, spawnQueue.length));
 
-  // Size proportional to HP: radius scales with cube root so volume ~ HP
-  const r = Math.max(0.9, Math.min(3.6, 0.5 * Math.cbrt(hp)));
+  // Size proportional to HP: radius scales with cube root so volume ~ HP (~20% bigger)
+  const r = Math.max(0.9, Math.min(3.6, 0.6 * Math.cbrt(hp)));
 
   // Speed: smaller enemies are faster; speeds increase significantly each wave
   const baseSpeed = 5.0 + game.wave * 0.35;
@@ -617,7 +623,7 @@ function startWave() {
   // Regen contributes (regen/sec × waveHP / 100) to effective damage, so solving
   //   waveHP = [duration×(playerDPS×acc + autoDPS) + regen×waveHP/100] / targetRatio
   // gives waveHP = baseDamage / (targetRatio − regen/100). Clamp denominator > 0.
-  const regenDenom = Math.max(0.1, targetRatio - game.hpRegen / 100);
+  const regenDenom = Math.max(0.1, targetRatio - (5 * game.hpRegen / 100));
 
   // Step 1: Use previous wave's duration as baseline to estimate waveHP
   // (For wave 1, assume ~25 second baseline)
@@ -760,7 +766,7 @@ const upgrades = {
   autoTurret: { name:'Build Auto-Turret', desc:'Adds an auto-turret', base:38, max:4, apply:()=>{ addAutoTurret(); } },
   autoPower:  { name:'Auto-Turret Power', desc:'+17.5% auto dmg & rate', base:24, max:25, apply:()=>{ game.autoDamage*=1.175; game.autoFireRate*=1.10; } },
   maxHp:      { name:'Max HP',        desc:'+30 max HP', base:18, max:40, apply:()=>{ game.maxHp += 30; } },
-  regen:      { name:'HP Regen',      desc:'+1.2 HP/sec', base:28, max:20, apply:()=>{ game.hpRegen += 1.2; } },
+  regen:      { name:'HP Regen',      desc:'+0.25 HP/sec', base:28, max:20, apply:()=>{ game.hpRegen += 0.25; } },
   repair:     { name:'Repair Tower',  desc:'Restore 40 HP', repair:true, healAmount:40 },
 };
 
@@ -788,7 +794,7 @@ function calculateNextWaveHP() {
   const playerAutoDPS = game.autoTurrets.length * game.autoDamage * game.autoFireRate;
 
   // waveHP = baseDamage / (targetRatio − regen/100); clamp denominator > 0
-  const regenDenom = Math.max(0.1, targetRatio - game.hpRegen / 100);
+  const regenDenom = Math.max(0.1, targetRatio - (5 * game.hpRegen / 100));
 
   // Step 1: Use current wave's duration as baseline
   const baselineDuration = game.waveDuration;
@@ -814,7 +820,7 @@ function calculateNextWaveHP() {
   // Step 6: Final exact duration
   const finalDuration = calculateWaveDurationExact(finalQueue, nextWave);
   const finalBaseDamage = finalDuration * ((playerMainDPS * lastWaveAccuracy) + playerAutoDPS);
-  const finalRegenFactor = (game.hpRegen * finalWaveHP) / 100;
+  const finalRegenFactor = 5 * game.hpRegen; // 5x per-second regen contribution
 
   return {
     playerDPS: playerMainDPS,
@@ -852,6 +858,11 @@ function update(dt) {
   aimPos[0] = m.x; aimPos[1] = m.y; aimPos[2] = m.z;
   aimPos[3] = m.x + dir*rayLen; aimPos[4] = m.y; aimPos[5] = m.z + dirFwd*rayLen;
   aimLine.geometry.attributes.position.needsUpdate = true;
+  // update glow sight line
+  const glowPos = aimGlow.geometry.attributes.position.array;
+  glowPos[0] = m.x; glowPos[1] = m.y; glowPos[2] = m.z;
+  glowPos[3] = m.x + dir*rayLen; glowPos[4] = m.y; glowPos[5] = m.z + dirFwd*rayLen;
+  aimGlow.geometry.attributes.position.needsUpdate = true;
 
   const hpFrac = Math.max(0, game.hp / game.maxHp);
   hpBar.scale.x = Math.max(0.001, hpFrac);
@@ -917,8 +928,8 @@ function update(dt) {
         e.z += e.speed * dt;
         e.g.position.z = e.z;
       } else {
-        // Damage incurred = (enemy remaining HP / wave total HP) * 100
-        damageTower(Math.max(1, Math.round((e.hp / waveEnemyHP) * 100)));
+        // Damage incurred = enemy remaining HP / 5
+        damageTower(Math.max(1, Math.round(e.hp / 5)));
         burst(e.x, e.r, e.z, e.eyeColor, 18, 10, 0.4);
         removeEnemy(j);
       }
