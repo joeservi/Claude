@@ -1185,6 +1185,7 @@ function renderUpgrades() {
         game.coins -= c; if (isBuild) u.apply(); else { game.lv[key]++; u.apply(); } }
       document.getElementById('shopCoins').textContent = game.coins;
       document.getElementById('shopHp').textContent = Math.ceil(game.hp);
+      document.getElementById('shopMaxHp').textContent = game.maxHp;
       updateShopProjection();
       renderUpgrades();
     };
