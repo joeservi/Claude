@@ -125,8 +125,8 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowShadowMap;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x000814); // solid night sky color
-scene.fog = new THREE.Fog(0x1a2a4a, 42, 110); // fog transitioning to battlefield color
+scene.background = new THREE.Color(0x000510); // deep space
+scene.fog = new THREE.Fog(0x000510, 60, 150); // distant platform edges dissolve into space
 
 // Steep angled overview (more overhead, less forward) looking into the field.
 // Camera sits high & above the player side; the WALL (Z=0) lands near the BOTTOM
@@ -239,13 +239,25 @@ function makeBrickTexture(w, h) {
   const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 
+// Battlefield platform — a raised slab floating in space, so the field "sticks
+// out" against the star background. Only the play area is floored; everywhere
+// else (left, right, beyond) is open space.
+const PLAT_W = 42, PLAT_L = 68, PLAT_H = 3.4, PLAT_CZ = -27;
 const groundMat = new THREE.MeshStandardMaterial({ map: makeGroundTexture(256, 256), roughness: 0.85, metalness: 0.08 });
-groundMat.map.repeat.set(16, 22); groundMat.map.wrapS = groundMat.map.wrapT = THREE.RepeatWrapping;
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 240), groundMat);
-ground.rotation.x = -Math.PI / 2; ground.position.z = -48; ground.receiveShadow = true;
+groundMat.map.repeat.set(5, 9); groundMat.map.wrapS = groundMat.map.wrapT = THREE.RepeatWrapping;
+const edgeMat = new THREE.MeshStandardMaterial({ color: 0x0a1422, roughness: 0.92, metalness: 0.4, emissive: 0x08101e, emissiveIntensity: 0.5 });
+// Box face material order: +x, -x, +y(top), -y, +z, -z
+const platMats = [edgeMat, edgeMat, groundMat, edgeMat, edgeMat, edgeMat];
+const ground = new THREE.Mesh(new THREE.BoxGeometry(PLAT_W, PLAT_H, PLAT_L), platMats);
+ground.position.set(0, -PLAT_H/2, PLAT_CZ); ground.receiveShadow = true; ground.castShadow = true;
 scene.add(ground);
 
-scene.add(new THREE.GridHelper(200, 80, 0x5a8aff, 0x0f1f40)); // brighter grid for better battlefield definition
+// Glowing trim along the top edges of the platform so its silhouette pops
+const trimMat = new THREE.MeshBasicMaterial({ color: 0x2c5f8a, fog: false });
+for (const sx of [-1, 1]) {
+  const trim = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, PLAT_L), trimMat);
+  trim.position.set(sx * (PLAT_W/2 - 0.2), 0, PLAT_CZ); scene.add(trim);
+}
 
 const railMat = new THREE.MeshBasicMaterial({ color: 0x3effff });
 for (const sx of [-1, 1]) {
@@ -261,11 +273,15 @@ for (const sx of [-1, 1]) {
   function makeStarLayer(n, color, size, opacity) {
     const pos = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
-      // Wide spread on X (left/right of screen), high on Y (top of screen),
-      // and spanning the depth so they appear beyond the field walls.
-      pos[i*3]   = (Math.random() - 0.5) * 320;        // left ↔ right
-      pos[i*3+1] = 8 + Math.random() * 120;            // low horizon → top of sky
-      pos[i*3+2] = -130 + Math.random() * 150;         // far field → near camera
+      let x, y, z;
+      // Reject samples that would float low directly over the platform footprint;
+      // keep them either to the sides, beyond the field, or high in the sky.
+      do {
+        x = (Math.random() - 0.5) * 340;               // left ↔ right
+        y = 6 + Math.random() * 130;                   // low horizon → top of sky
+        z = -135 + Math.random() * 150;                // far field → near camera
+      } while (Math.abs(x) < 26 && z > -68 && z < 6 && y < 55);
+      pos[i*3] = x; pos[i*3+1] = y; pos[i*3+2] = z;
     }
     const geo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(pos, 3));
     const mat = new THREE.PointsMaterial({ color, size, sizeAttenuation: true, transparent: true, opacity, fog: false });
@@ -388,7 +404,7 @@ const aimConeMat = new THREE.ShaderMaterial({
   transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false,
   uniforms: { uMax: { value: AIM_LEN } },
   vertexShader: `varying float vDist; void main(){ vDist = length(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
-  fragmentShader: `varying float vDist; uniform float uMax; void main(){ float a = (1.0 - vDist/uMax); a = clamp(a,0.0,1.0); gl_FragColor = vec4(1.0,0.93,0.47, a*a*0.16); }`
+  fragmentShader: `varying float vDist; uniform float uMax; void main(){ float a = (1.0 - vDist/uMax); a = clamp(a,0.0,1.0); gl_FragColor = vec4(0.85,0.78,0.45, a*a*a*0.05); }`
 });
 const aimCone = new THREE.Mesh(aimConeGeo, aimConeMat);
 aimCone.frustumCulled = false;
@@ -396,7 +412,7 @@ aimGroup.add(aimCone);
 
 // Center sight line straight down the middle of the cone
 const aimLineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,-AIM_LEN)]);
-const aimLineMat = new THREE.LineBasicMaterial({ color: 0xffed78, transparent: true, opacity: 0.35, fog: false });
+const aimLineMat = new THREE.LineBasicMaterial({ color: 0xbdb060, transparent: true, opacity: 0.16, fog: false });
 const aimLine = new THREE.Line(aimLineGeo, aimLineMat);
 aimLine.frustumCulled = false;
 aimGroup.add(aimLine);
@@ -748,14 +764,14 @@ function endWave() {
   game.coins += coinsEarned;
   lastCoinsEarned = coinsEarned;
 
-  playSound(523, 0.18, 'sine', 0.18); playSound(659, 0.2, 'sine', 0.18);
+  playSound(392, 0.22, 'sine', 0.06); playSound(523, 0.26, 'sine', 0.05);
   state = State.WAVE_SUMMARY; showWaveSummary(accuracy, totalDPS);
 }
 
 function damageTower(amount) {
   game.hp -= amount;
   shakeT = 0.2;
-  playSound(180, 0.12, 'sawtooth', 0.12);
+  playSound(130, 0.12, 'sine', 0.06);
   if (game.hp <= 0) { game.hp = 0; gameOver(); }
 }
 
@@ -764,7 +780,7 @@ function gameOver() {
   document.getElementById('bestWave').textContent = game.bestWave;
   document.getElementById('gameOverSub').textContent = `You reached Wave ${game.wave}. The horde broke through.`;
   show('gameOverScreen');
-  playSound(90, 0.5, 'sine', 0.2);
+  playSound(80, 0.5, 'sine', 0.1);
 }
 
 const upgrades = {
@@ -909,7 +925,7 @@ function update(dt) {
         if (e.hp <= 0) {
           game.coins += e.reward; addFloater(e.x, e.r + 1.8, e.z, '+' + e.reward, '#ffe24a');
           burst(e.x, e.r, e.z, e.eyeColor, 26, 12, 0.4);
-          playSound(1150, 0.12, 'triangle', 0.12);
+          playSound(160, 0.09, 'sine', 0.04);
           removeEnemy(j);
         }
         if (b.pierce <= 0) { b.active = false; b.mesh.visible = false; break; }
