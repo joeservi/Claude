@@ -253,37 +253,29 @@ for (const sx of [-1, 1]) {
   rail.position.set(sx * HALF_W, 0.4, -30); scene.add(rail);
 }
 
-// Parallax starfield with depth layers (expanded to cover sides and above)
+// Starfield surrounding the battlefield (left, right, above). fog:false so the
+// stars are NOT washed out by the battlefield fog. Positioned within view of the
+// high overview camera so they fill the screen edges around the play area.
 (() => {
-  // Far stars (small, dim, far away)
-  const farN = 400, farPos = new Float32Array(farN * 3);
-  for (let i = 0; i < farN; i++) {
-    farPos[i*3]   = (Math.random() - 0.5) * 600;
-    farPos[i*3+1] = 20 + Math.random() * 140;
-    farPos[i*3+2] = -240;
+  // A big dome/shell of stars wrapping around and above the field.
+  function makeStarLayer(n, color, size, opacity) {
+    const pos = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      // Wide spread on X (left/right of screen), high on Y (top of screen),
+      // and spanning the depth so they appear beyond the field walls.
+      pos[i*3]   = (Math.random() - 0.5) * 320;        // left ↔ right
+      pos[i*3+1] = 8 + Math.random() * 120;            // low horizon → top of sky
+      pos[i*3+2] = -130 + Math.random() * 150;         // far field → near camera
+    }
+    const geo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({ color, size, sizeAttenuation: true, transparent: true, opacity, fog: false });
+    const pts = new THREE.Points(geo, mat);
+    pts.frustumCulled = false;
+    scene.add(pts);
   }
-  const farGeo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(farPos, 3));
-  scene.add(new THREE.Points(farGeo, new THREE.PointsMaterial({ color: 0xccb0ff, size: 0.8, sizeAttenuation: true, transparent: true, opacity: 0.6 })));
-
-  // Mid stars (medium, brighter)
-  const midN = 600, midPos = new Float32Array(midN * 3);
-  for (let i = 0; i < midN; i++) {
-    midPos[i*3]   = (Math.random() - 0.5) * 520;
-    midPos[i*3+1] = 15 + Math.random() * 130;
-    midPos[i*3+2] = -160 + Math.random() * 100;
-  }
-  const midGeo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(midPos, 3));
-  scene.add(new THREE.Points(midGeo, new THREE.PointsMaterial({ color: 0xeae0ff, size: 1.2, sizeAttenuation: true, transparent: true, opacity: 0.85 })));
-
-  // Near stars (larger, bright)
-  const nearN = 300, nearPos = new Float32Array(nearN * 3);
-  for (let i = 0; i < nearN; i++) {
-    nearPos[i*3]   = (Math.random() - 0.5) * 480;
-    nearPos[i*3+1] = 30 + Math.random() * 110;
-    nearPos[i*3+2] = -100 + Math.random() * 80;
-  }
-  const nearGeo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(nearPos, 3));
-  scene.add(new THREE.Points(nearGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 2.2, sizeAttenuation: true, transparent: true, opacity: 1 })));
+  makeStarLayer(500, 0xccb0ff, 0.9, 0.6);   // far/dim
+  makeStarLayer(650, 0xeae0ff, 1.5, 0.85);  // mid
+  makeStarLayer(350, 0xffffff, 2.4, 1.0);   // near/bright
 })();
 
 // Wall with enhanced detail
@@ -381,12 +373,33 @@ const mainTurret = buildTurret(1.1, false);
 mainTurret.group.position.set(0, 0, WALL_Z);
 scene.add(mainTurret.group);
 
-// Aim cone (subtle firing arc instead of line)
-const aimConeMat = new THREE.MeshBasicMaterial({ color: 0xffed78, transparent: true, opacity: 0.08, fog: false, side: THREE.DoubleSide, depthWrite: false });
-const aimConeGeo = new THREE.ConeGeometry(8, 62, 16, 1, true, -Math.PI/12, Math.PI/6);
+// Aim sight: a tight cone that starts as a point at the muzzle and spreads
+// down the battlefield, fading toward the far end, with a crisp center line.
+const AIM_LEN = 60;
+const aimGroup = new THREE.Group();
+scene.add(aimGroup);
+
+// Open cone, apex at origin spreading toward -Z (forward). Baked rotation so the
+// local position length goes 0 (apex/muzzle) → AIM_LEN (far end) for the fade.
+const aimConeGeo = new THREE.ConeGeometry(5, AIM_LEN, 22, 1, true);
+aimConeGeo.translate(0, -AIM_LEN / 2, 0); // apex to origin, base at -AIM_LEN on Y
+aimConeGeo.rotateX(Math.PI / 2);          // apex at origin, base toward -Z
+const aimConeMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false,
+  uniforms: { uMax: { value: AIM_LEN } },
+  vertexShader: `varying float vDist; void main(){ vDist = length(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+  fragmentShader: `varying float vDist; uniform float uMax; void main(){ float a = (1.0 - vDist/uMax); a = clamp(a,0.0,1.0); gl_FragColor = vec4(1.0,0.93,0.47, a*a*0.16); }`
+});
 const aimCone = new THREE.Mesh(aimConeGeo, aimConeMat);
-aimCone.layers.set(0); aimCone.frustumCulled = false;
-scene.add(aimCone);
+aimCone.frustumCulled = false;
+aimGroup.add(aimCone);
+
+// Center sight line straight down the middle of the cone
+const aimLineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,-AIM_LEN)]);
+const aimLineMat = new THREE.LineBasicMaterial({ color: 0xffed78, transparent: true, opacity: 0.35, fog: false });
+const aimLine = new THREE.Line(aimLineGeo, aimLineMat);
+aimLine.frustumCulled = false;
+aimGroup.add(aimLine);
 
 const game = {
   coins: 0, wave: 0, bestWave: 0,
@@ -552,7 +565,7 @@ function fireMain() {
   const m = new THREE.Vector3(); mainTurret.muzzle.getWorldPosition(m);
   spawnBullet(m.x, m.y, m.z, dx, dz, BULLET_SPEED, game.damage, true);
   burst(m.x, m.y, m.z, 0xffe24a, 7, 8, 0.22);
-  playSound(820, 0.08, 'square', 0.09);
+  playSound(280, 0.05, 'sine', 0.035);
 }
 
 function fireAuto(t) {
@@ -847,8 +860,8 @@ function update(dt) {
   mainTurret.yawGrp.rotation.y = -yaw;
 
   const m = new THREE.Vector3(); mainTurret.muzzle.getWorldPosition(m);
-  aimCone.position.copy(m);
-  aimCone.rotation.z = yaw;
+  aimGroup.position.copy(m);
+  aimGroup.rotation.y = -yaw;
 
   const hpFrac = Math.max(0, game.hp / game.maxHp);
   hpBar.scale.x = Math.max(0.001, hpFrac);
