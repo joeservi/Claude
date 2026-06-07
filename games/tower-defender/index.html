@@ -634,7 +634,7 @@ function startWave() {
   game.wave++;
   game.bestWave = Math.max(game.bestWave, game.wave);
 
-  const playerMainDPS = game.damage * game.fireRate;
+  const playerMainDPS = getPlayerMainDPS(game.damage, game.fireRate, game.pierce);
   const playerAutoDPS = game.autoTurrets.length * game.autoDamage * game.autoFireRate;
 
   // Target difficulty ratio for this wave (1.2 → 0.8 by wave 10)
@@ -652,7 +652,8 @@ function startWave() {
   // Step 1: Use previous wave's duration as baseline to estimate waveHP
   // (For wave 1, assume ~25 second baseline)
   const baselineDuration = game.wave === 1 ? 25 : game.waveDuration;
-  const baselineBaseDamage = baselineDuration * ((playerMainDPS * accuracyForCalc) + playerAutoDPS);
+  const playerMainDPSWithAcc = getPlayerMainDPSWithAccuracy(game.damage, game.fireRate, game.pierce, accuracyForCalc);
+  const baselineBaseDamage = baselineDuration * (playerMainDPSWithAcc + playerAutoDPS);
   let waveHP = Math.round(baselineBaseDamage / regenDenom);
 
   // Step 2: Build the actual wave composition
@@ -667,7 +668,7 @@ function startWave() {
   const exactDuration = calculateWaveDurationExact(spawnQueue, game.wave);
 
   // Step 4: Recalculate waveHP with exact duration
-  const exactBaseDamage = exactDuration * ((playerMainDPS * accuracyForCalc) + playerAutoDPS);
+  const exactBaseDamage = exactDuration * (playerMainDPSWithAcc + playerAutoDPS);
   const newWaveHP = Math.round(exactBaseDamage / regenDenom);
 
   // Step 5: If waveHP differs significantly, rebuild queue and recalculate duration
@@ -802,6 +803,20 @@ const ECONOMY = {
   dpsGrowthPerWave: 1.25,
 };
 
+function getPlayerMainDPS(damage, fireRate, pierce) {
+  // Total DPS including pierce: first hit at full damage, second at 0.6x
+  if (pierce >= 1) return fireRate * damage * 1.6;
+  return fireRate * damage;
+}
+
+function getPlayerMainDPSWithAccuracy(damage, fireRate, pierce, accuracy) {
+  // DPS considering accuracy, but only accuracy applies to first hits.
+  // Pierce bonus damage is assumed to happen (doesn't need accuracy bonus).
+  const firstHitDPS = fireRate * damage * accuracy;
+  const secondHitDPS = (pierce >= 1) ? (fireRate * damage * 0.6) : 0;
+  return firstHitDPS + secondHitDPS;
+}
+
 function upgradeCost(key) {
   const u = upgrades[key];
   if (u.repair) return Math.round(12 * (1 + game.wave * 0.25));
@@ -814,7 +829,7 @@ function calculateNextWaveHP() {
   // Forecast the actual queue, timing, and resulting wave length
   const nextWave = game.wave + 1;
   const targetRatio = getTargetDifficultyRatio(nextWave);
-  const playerMainDPS = game.damage * game.fireRate;
+  const playerMainDPS = getPlayerMainDPS(game.damage, game.fireRate, game.pierce);
   const playerAutoDPS = game.autoTurrets.length * game.autoDamage * game.autoFireRate;
 
   // waveHP = baseDamage / (targetRatio − regen/100); clamp denominator > 0
@@ -1005,12 +1020,14 @@ function updateHUD() {
   document.getElementById('tbEnemies').textContent = (enemies.length + toSpawn);
 
   // Dashboard - Full economic stats
-  const mainDps = game.damage * game.fireRate;
+  const mainDps = getPlayerMainDPS(game.damage, game.fireRate, game.pierce);
   const autoDps = game.autoTurrets.length * game.autoDamage * game.autoFireRate;
   const accFrac = mainBulletsFired > 0 ? mainBulletsHit / mainBulletsFired : 0;
   const acc = Math.round(accFrac * 100);
-  // Effective Damage = Wave Length × (Player DPS × Accuracy + Auto DPS) + Regen contribution
-  const baseDmg = game.waveDuration * ((mainDps * accFrac) + autoDps);
+  // Effective Damage = Wave Length × (First hit DPS × Accuracy + Pierce bonus + Auto DPS) + Regen
+  const firstHitDPS = game.damage * game.fireRate;
+  const pierceBonus = (game.pierce >= 1) ? (game.fireRate * game.damage * 0.6) : 0;
+  const baseDmg = game.waveDuration * ((firstHitDPS * accFrac) + pierceBonus + autoDps);
   const regenDmg = (game.hpRegen * expectedNextWaveHP) / 100;
   const effDmg = baseDmg + regenDmg;
   // Actual difficulty ratio = Effective Damage / Wave HP (constant wave HP)
@@ -1028,15 +1045,17 @@ function updateHUD() {
 }
 
 function showWaveSummary(accuracy, totalDps) {
-  const mainDps = game.damage * game.fireRate;
+  const mainDps = getPlayerMainDPS(game.damage, game.fireRate, game.pierce);
   const autoDps = game.autoTurrets.length * game.autoDamage * game.autoFireRate;
 
   // Store accuracy for next wave calculation
   lastWaveAccuracy = accuracy;
 
-  // Effective Damage = Wave Length × (Player DPS × Accuracy + Auto DPS) + Regen contribution
+  // Effective Damage = Wave Length × (First hit DPS × Accuracy + Pierce bonus + Auto DPS) + Regen
   // Regen contribution = (game.hpRegen * waveHP) / 100
-  const baseDamage = game.waveDuration * ((mainDps * accuracy) + autoDps);
+  const firstHitDPS = game.damage * game.fireRate;
+  const pierceBonus = (game.pierce >= 1) ? (game.fireRate * game.damage * 0.6) : 0;
+  const baseDamage = game.waveDuration * ((firstHitDPS * accuracy) + pierceBonus + autoDps);
   const regenContribution = (game.hpRegen * expectedNextWaveHP) / 100;
   const effectiveDamage = baseDamage + regenContribution;
   // Actual difficulty ratio = Effective Damage / Wave HP
@@ -1141,7 +1160,13 @@ function renderUpgrades() {
     else if (isBuild) lvlLine = `<span class="lvl">${game.autoTurrets.length}/${u.max} built</span>`;
     else if (isPierce) lvlLine = `<span class="lvl">Lv ${game.lv.pierce}${game.lv.pierce>=u.max?'':' → '+(game.lv.pierce+1)}</span>`;
     else lvlLine = `<span class="lvl">Lv ${lvl}${maxed?'':' → '+(lvl+1)}</span>`;
-    btn.innerHTML = `<span class="cost">${right}</span><span class="name">${u.name}</span>${lvlLine}<br><span style="color:#8aa0c8;font-size:11px">${u.desc}</span>`;
+    let desc = u.desc;
+    if (isPierce) {
+      const currentSecondary = Math.round(game.damage * 0.6);
+      const nextSecondary = game.lv.pierce < u.max ? Math.round(game.damage * 0.6) : currentSecondary;
+      desc = `Bullets pierce (+60% dmg to secondary): ${currentSecondary}${game.lv.pierce < u.max ? ' → ' + nextSecondary : ''}`;
+    }
+    btn.innerHTML = `<span class="cost">${right}</span><span class="name">${u.name}</span>${lvlLine}<br><span style="color:#8aa0c8;font-size:11px">${desc}</span>`;
     btn.onclick = () => {
       const c = upgradeCost(key);
       if (game.coins < c) return;
