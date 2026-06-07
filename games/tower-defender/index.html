@@ -105,14 +105,14 @@ const HALF_W = 15, SPAWN_Z = -52, WALL_Z = 0, MAX_YAW = Math.PI / 2, BULLET_SPEE
 const TOWER_DMG_SCALE = 1.0; // Tower damage = enemy remaining HP (1:1)
 let soundEnabled = true;
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-function playSound(freq, duration, type='sine', volume=0.1) {
+function playSound(freq, duration, type='sine', volume=0.04) {
   if (!freq || !soundEnabled) return;
   try { const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
     osc.connect(gain); gain.connect(audioCtx.destination);
     osc.type = type; osc.frequency.value = freq;
     gain.gain.setValueAtTime(volume, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
-    osc.start(); osc.stop(audioCtx.currentTime + duration);
+    gain.gain.exponentialRampToValueAtTime(0.005, audioCtx.currentTime + duration * 0.8);
+    osc.start(); osc.stop(audioCtx.currentTime + duration * 0.8);
   } catch(e) {}
 }
 
@@ -253,34 +253,34 @@ for (const sx of [-1, 1]) {
   rail.position.set(sx * HALF_W, 0.4, -30); scene.add(rail);
 }
 
-// Parallax starfield with depth layers
+// Parallax starfield with depth layers (expanded to cover sides and above)
 (() => {
   // Far stars (small, dim, far away)
-  const farN = 200, farPos = new Float32Array(farN * 3);
+  const farN = 400, farPos = new Float32Array(farN * 3);
   for (let i = 0; i < farN; i++) {
-    farPos[i*3]   = (Math.random() - 0.5) * 400;
-    farPos[i*3+1] = 40 + Math.random() * 120;
-    farPos[i*3+2] = -220;
+    farPos[i*3]   = (Math.random() - 0.5) * 600;
+    farPos[i*3+1] = 20 + Math.random() * 140;
+    farPos[i*3+2] = -240;
   }
   const farGeo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(farPos, 3));
   scene.add(new THREE.Points(farGeo, new THREE.PointsMaterial({ color: 0xccb0ff, size: 0.8, sizeAttenuation: true, transparent: true, opacity: 0.6 })));
 
   // Mid stars (medium, brighter)
-  const midN = 350, midPos = new Float32Array(midN * 3);
+  const midN = 600, midPos = new Float32Array(midN * 3);
   for (let i = 0; i < midN; i++) {
-    midPos[i*3]   = (Math.random() - 0.5) * 360;
-    midPos[i*3+1] = 35 + Math.random() * 110;
-    midPos[i*3+2] = -140 + Math.random() * 80;
+    midPos[i*3]   = (Math.random() - 0.5) * 520;
+    midPos[i*3+1] = 15 + Math.random() * 130;
+    midPos[i*3+2] = -160 + Math.random() * 100;
   }
   const midGeo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(midPos, 3));
   scene.add(new THREE.Points(midGeo, new THREE.PointsMaterial({ color: 0xeae0ff, size: 1.2, sizeAttenuation: true, transparent: true, opacity: 0.85 })));
 
   // Near stars (larger, bright)
-  const nearN = 150, nearPos = new Float32Array(nearN * 3);
+  const nearN = 300, nearPos = new Float32Array(nearN * 3);
   for (let i = 0; i < nearN; i++) {
-    nearPos[i*3]   = (Math.random() - 0.5) * 340;
-    nearPos[i*3+1] = 50 + Math.random() * 90;
-    nearPos[i*3+2] = -80 + Math.random() * 60;
+    nearPos[i*3]   = (Math.random() - 0.5) * 480;
+    nearPos[i*3+1] = 30 + Math.random() * 110;
+    nearPos[i*3+2] = -100 + Math.random() * 80;
   }
   const nearGeo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(nearPos, 3));
   scene.add(new THREE.Points(nearGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 2.2, sizeAttenuation: true, transparent: true, opacity: 1 })));
@@ -381,12 +381,12 @@ const mainTurret = buildTurret(1.1, false);
 mainTurret.group.position.set(0, 0, WALL_Z);
 scene.add(mainTurret.group);
 
-// Aim line
-const aimLineMat = new THREE.LineBasicMaterial({ color: 0xffed78, linewidth: 1, transparent: true, opacity: 0.15, fog: false });
-const aimLineGeo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(2*3), 3));
-const aimLine = new THREE.Line(aimLineGeo, aimLineMat);
-aimLine.layers.set(0); aimLine.frustumCulled = false;
-scene.add(aimLine);
+// Aim cone (subtle firing arc instead of line)
+const aimConeMat = new THREE.MeshBasicMaterial({ color: 0xffed78, transparent: true, opacity: 0.08, fog: false, side: THREE.DoubleSide, depthWrite: false });
+const aimConeGeo = new THREE.ConeGeometry(8, 62, 16, 1, true, -Math.PI/12, Math.PI/6);
+const aimCone = new THREE.Mesh(aimConeGeo, aimConeMat);
+aimCone.layers.set(0); aimCone.frustumCulled = false;
+scene.add(aimCone);
 
 const game = {
   coins: 0, wave: 0, bestWave: 0,
@@ -490,10 +490,10 @@ function spawnEnemy() {
   const baseSpeed = 5.0 + game.wave * 0.35;
   const speed = baseSpeed * (1.9 / (r + 0.7));
 
-  // Shape & color tier based on HP, spaced 0→200 so the most-sided shape is ~200 HP
-  const tier = hp < 30 ? 0 : hp < 70 ? 1 : hp < 110 ? 2 : hp < 160 ? 3 : 4;
-  const color =    [0x35c8a0, 0x4a9ae8, 0x8a6ae0, 0xe0902a, 0xd83838][tier];
-  const eyeColor = [0x9fffe0, 0x9fd0ff, 0xd8b8ff, 0xffd28a, 0xff8a6a][tier];
+  // Shape & color tier based on HP
+  const tier = hp < 30 ? 0 : hp < 70 ? 1 : hp < 110 ? 2 : hp < 160 ? 3 : hp < 220 ? 4 : 5;
+  const color =    [0x35c8a0, 0x4a9ae8, 0x8a6ae0, 0xe0902a, 0xd83838, 0xff1493][tier];
+  const eyeColor = [0x9fffe0, 0x9fd0ff, 0xd8b8ff, 0xffd28a, 0xff8a6a, 0xffb3d9][tier];
 
   const g = new THREE.Group();
   const x = (Math.random() * 2 - 1) * (HALF_W - 2);
@@ -506,7 +506,8 @@ function spawnEnemy() {
     case 1: geo = new THREE.BoxGeometry(r*1.4, r*1.4, r*1.4); break; // 6 faces
     case 2: geo = new THREE.OctahedronGeometry(r, 0); break;         // 8 faces
     case 3: geo = new THREE.DodecahedronGeometry(r, 0); break;       // 12 faces
-    default: geo = new THREE.IcosahedronGeometry(r, 1); break;       // 20+ faces
+    case 4: geo = new THREE.IcosahedronGeometry(r, 1); break;        // 20 faces
+    default: geo = new THREE.IcosahedronGeometry(r, 2); break;       // 80+ faces (super-enemy)
   }
   const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.65, emissive: eyeColor, emissiveIntensity: 0.6 });
   const mesh = new THREE.Mesh(geo, mat);
@@ -570,9 +571,9 @@ function fireAuto(t) {
 }
 
 function getTargetDifficultyRatio(wave) {
-  // Difficulty ratio: 1.2 at wave 1, linearly falling to 0.9 by wave 10, then constant
-  if (wave >= 10) return 0.9;
-  return 1.2 - ((wave - 1) * 0.3 / 9);
+  // Difficulty ratio: 1.2 at wave 1, linearly falling to 0.95 by wave 10, then constant
+  if (wave >= 10) return 0.95;
+  return 1.2 - ((wave - 1) * 0.25 / 9);
 }
 
 function calculateWaveDurationExact(queue, wave) {
@@ -587,7 +588,7 @@ function calculateWaveDurationExact(queue, wave) {
 
   for (let i = 0; i < queue.length; i++) {
     const enemyHP = queue[i];
-    const radius = Math.max(0.9, Math.min(3.4, 0.55 * Math.cbrt(enemyHP)));
+    const radius = Math.max(1.2, Math.min(4.2, 1.0 * Math.cbrt(enemyHP)));
     const enemySpeed = baseSpeed * (1.9 / (radius + 0.7));
 
     const spawnTime = i * spawnInterval;
@@ -845,13 +846,9 @@ function update(dt) {
   mainTurret.coreB.material.color.setRGB(1, 0.94, 0.6 + 0.35 * Math.sin(t * 4.5 + 1));
   mainTurret.yawGrp.rotation.y = -yaw;
 
-  const aimPos = aimLine.geometry.attributes.position.array;
   const m = new THREE.Vector3(); mainTurret.muzzle.getWorldPosition(m);
-  const dir = Math.sin(yaw), dirFwd = -Math.cos(yaw);
-  const rayLen = 62;
-  aimPos[0] = m.x; aimPos[1] = m.y; aimPos[2] = m.z;
-  aimPos[3] = m.x + dir*rayLen; aimPos[4] = m.y; aimPos[5] = m.z + dirFwd*rayLen;
-  aimLine.geometry.attributes.position.needsUpdate = true;
+  aimCone.position.copy(m);
+  aimCone.rotation.z = yaw;
 
   const hpFrac = Math.max(0, game.hp / game.maxHp);
   hpBar.scale.x = Math.max(0.001, hpFrac);
