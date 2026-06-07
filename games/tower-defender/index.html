@@ -239,21 +239,19 @@ function makeBrickTexture(w, h) {
   const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 
-// Battlefield platform — a raised slab floating in space, so the field "sticks
-// out" against the star background. Only the play area is floored; everywhere
-// else (left, right, beyond) is open space.
-const PLAT_W = 42, PLAT_L = 68, PLAT_H = 3.4, PLAT_CZ = -27;
+// Battlefield platform — only cover the playable area (between the cyan rails).
+// Everything outside fades to space background. Platform floats in space.
+const PLAT_W = 30.5, PLAT_L = 68, PLAT_H = 3.4, PLAT_CZ = -27;
 const groundMat = new THREE.MeshStandardMaterial({ map: makeGroundTexture(256, 256), roughness: 0.85, metalness: 0.08 });
 groundMat.map.repeat.set(5, 9); groundMat.map.wrapS = groundMat.map.wrapT = THREE.RepeatWrapping;
 const edgeMat = new THREE.MeshStandardMaterial({ color: 0x0a1422, roughness: 0.92, metalness: 0.4, emissive: 0x08101e, emissiveIntensity: 0.5 });
-// Box face material order: +x, -x, +y(top), -y, +z, -z
 const platMats = [edgeMat, edgeMat, groundMat, edgeMat, edgeMat, edgeMat];
 const ground = new THREE.Mesh(new THREE.BoxGeometry(PLAT_W, PLAT_H, PLAT_L), platMats);
 ground.position.set(0, -PLAT_H/2, PLAT_CZ); ground.receiveShadow = true; ground.castShadow = true;
 scene.add(ground);
 
-// Glowing trim along the top edges of the platform so its silhouette pops
-const trimMat = new THREE.MeshBasicMaterial({ color: 0x2c5f8a, fog: false });
+// Glowing trim along the top edges (less prominent to let background show)
+const trimMat = new THREE.MeshBasicMaterial({ color: 0x1a3a5a, fog: false });
 for (const sx of [-1, 1]) {
   const trim = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, PLAT_L), trimMat);
   trim.position.set(sx * (PLAT_W/2 - 0.2), 0, PLAT_CZ); scene.add(trim);
@@ -265,17 +263,13 @@ for (const sx of [-1, 1]) {
   rail.position.set(sx * HALF_W, 0.4, -30); scene.add(rail);
 }
 
-// Starfield surrounding the battlefield (left, right, above). fog:false so the
-// stars are NOT washed out by the battlefield fog. Positioned within view of the
-// high overview camera so they fill the screen edges around the play area.
+// Starfield with subtle twinkling. Twinkle driven by shader based on position and time.
+const starLayers = [];
 (() => {
-  // A big dome/shell of stars wrapping around and above the field.
   function makeStarLayer(n, color, size, opacity) {
     const pos = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
       let x, y, z;
-      // Reject samples that would float low directly over the platform footprint;
-      // keep them either to the sides, beyond the field, or high in the sky.
       do {
         x = (Math.random() - 0.5) * 340;               // left ↔ right
         y = 6 + Math.random() * 130;                   // low horizon → top of sky
@@ -284,10 +278,17 @@ for (const sx of [-1, 1]) {
       pos[i*3] = x; pos[i*3+1] = y; pos[i*3+2] = z;
     }
     const geo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    const mat = new THREE.PointsMaterial({ color, size, sizeAttenuation: true, transparent: true, opacity, fog: false });
+    const mat = new THREE.ShaderMaterial({
+      transparent: true, fog: false,
+      uniforms: { uColor: { value: new THREE.Color(color) }, uBaseOp: { value: opacity }, uTime: { value: 0 } },
+      vertexShader: `varying vec3 vPos; void main(){ vPos = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); gl_PointSize = ${size}; }`,
+      fragmentShader: `uniform vec3 uColor; uniform float uBaseOp; uniform float uTime; varying vec3 vPos;
+        void main(){ float t = sin(uTime + vPos.x*0.05 + vPos.y*0.03)*0.5+0.5; gl_FragColor = vec4(uColor, uBaseOp * (0.65 + t*0.35)); }`
+    });
     const pts = new THREE.Points(geo, mat);
     pts.frustumCulled = false;
     scene.add(pts);
+    starLayers.push(mat);
   }
   makeStarLayer(500, 0xccb0ff, 0.9, 0.6);   // far/dim
   makeStarLayer(650, 0xeae0ff, 1.5, 0.85);  // mid
@@ -804,8 +805,12 @@ const ECONOMY = {
 };
 
 function getPlayerMainDPS(damage, fireRate, pierce) {
-  // Total DPS including pierce: first hit at full damage, second at 0.6x
-  if (pierce >= 1) return fireRate * damage * 1.6;
+  // Pierce scales: Lv 1 = 20%, Lv 2 = 40%, Lv 3 = 60%, etc. (20% per level)
+  // First hit full damage, subsequent at (pierce * 0.2) damage
+  if (pierce >= 1) {
+    const secondaryMultiplier = pierce * 0.2; // 20% per level
+    return fireRate * damage * (1 + secondaryMultiplier);
+  }
   return fireRate * damage;
 }
 
@@ -813,7 +818,8 @@ function getPlayerMainDPSWithAccuracy(damage, fireRate, pierce, accuracy) {
   // DPS considering accuracy, but only accuracy applies to first hits.
   // Pierce bonus damage is assumed to happen (doesn't need accuracy bonus).
   const firstHitDPS = fireRate * damage * accuracy;
-  const secondHitDPS = (pierce >= 1) ? (fireRate * damage * 0.6) : 0;
+  const secondaryMultiplier = pierce >= 1 ? pierce * 0.2 : 0;
+  const secondHitDPS = (pierce >= 1) ? (fireRate * damage * secondaryMultiplier) : 0;
   return firstHitDPS + secondHitDPS;
 }
 
@@ -886,6 +892,7 @@ function addAutoTurret() {
 
 function update(dt) {
   const t = clock.elapsedTime;
+  starLayers.forEach(mat => mat.uniforms.uTime.value = t);
   mainTurret.coreF.material.color.setRGB(1, 0.94, 0.6 + 0.35 * Math.sin(t * 5));
   mainTurret.coreB.material.color.setRGB(1, 0.94, 0.6 + 0.35 * Math.sin(t * 4.5 + 1));
   mainTurret.yawGrp.rotation.y = -yaw;
@@ -1162,9 +1169,11 @@ function renderUpgrades() {
     else lvlLine = `<span class="lvl">Lv ${lvl}${maxed?'':' → '+(lvl+1)}</span>`;
     let desc = u.desc;
     if (isPierce) {
-      const currentSecondary = Math.round(game.damage * 0.6);
-      const nextSecondary = game.lv.pierce < u.max ? Math.round(game.damage * 0.6) : currentSecondary;
-      desc = `Bullets pierce (+60% dmg to secondary): ${currentSecondary}${game.lv.pierce < u.max ? ' → ' + nextSecondary : ''}`;
+      const currentPercent = game.lv.pierce * 20;
+      const nextPercent = game.lv.pierce < u.max ? (game.lv.pierce + 1) * 20 : currentPercent;
+      const currentSecondary = Math.round(game.damage * game.lv.pierce * 0.2);
+      const nextSecondary = game.lv.pierce < u.max ? Math.round(game.damage * (game.lv.pierce + 1) * 0.2) : currentSecondary;
+      desc = `Bullets pierce secondary: ${currentPercent}% dmg (${currentSecondary})${game.lv.pierce < u.max ? ' → ' + nextPercent + '% (' + nextSecondary + ')' : ''}`;
     }
     btn.innerHTML = `<span class="cost">${right}</span><span class="name">${u.name}</span>${lvlLine}<br><span style="color:#8aa0c8;font-size:11px">${desc}</span>`;
     btn.onclick = () => {
