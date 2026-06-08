@@ -940,9 +940,10 @@ function update(dt) {
       if ((bx - e.x) ** 2 + (bz - e.z) ** 2 <= rr * rr) {
         const dmg = b.pierce > 0 ? b.dmg * 0.6 : b.dmg;
         e.hp -= dmg;
-        e.hitFlash = 0.12;
-        burst(bx, e.r, bz, e.eyeColor, 5, 5, 0.16);
-        if (b.isMain) mainBulletsHit++;
+        e.hitFlash = 0.08;
+        burst(bx, e.r, bz, e.eyeColor, 3, 4, 0.14);
+        const isFirstHit = b.hitEnemies.size === 0;
+        if (b.isMain && isFirstHit) mainBulletsHit++;
         b.hitEnemies.add(j);
         if (e.hp <= 0) {
           game.coins += e.reward; addFloater(e.x, e.r + 1.8, e.z, '+' + e.reward, '#ffe24a');
@@ -978,7 +979,7 @@ function update(dt) {
     e.bob += dt * 3;
     e.mesh.position.y = e.r + Math.sin(e.bob) * 0.18;
     e.mesh.rotation.y += dt * 1.3;
-    if (e.hitFlash > 0) { e.hitFlash -= dt; e.mat.emissiveIntensity = e.baseEI + e.hitFlash * 18; }
+    if (e.hitFlash > 0) { e.hitFlash -= dt; e.mat.emissiveIntensity = e.baseEI + e.hitFlash * 6; }
     else e.mat.emissiveIntensity = e.baseEI;
     const f = Math.max(0, e.hp / e.maxHp);
     const dmgd = f < 0.999;
@@ -1169,11 +1170,7 @@ function renderUpgrades() {
     else lvlLine = `<span class="lvl">Lv ${lvl}${maxed?'':' → '+(lvl+1)}</span>`;
     let desc = u.desc;
     if (isPierce) {
-      const currentPercent = game.lv.pierce * 20;
-      const nextPercent = game.lv.pierce < u.max ? (game.lv.pierce + 1) * 20 : currentPercent;
-      const currentSecondary = Math.round(game.damage * game.lv.pierce * 0.2);
-      const nextSecondary = game.lv.pierce < u.max ? Math.round(game.damage * (game.lv.pierce + 1) * 0.2) : currentSecondary;
-      desc = `Bullets pierce secondary: ${currentPercent}% dmg (${currentSecondary})${game.lv.pierce < u.max ? ' → ' + nextPercent + '% (' + nextSecondary + ')' : ''}`;
+      desc = `Secondary damage +${(game.lv.pierce + 1) * 20}%`;
     }
     btn.innerHTML = `<span class="cost">${right}</span><span class="name">${u.name}</span>${lvlLine}<br><span style="color:#8aa0c8;font-size:11px">${desc}</span>`;
     btn.onclick = () => {
