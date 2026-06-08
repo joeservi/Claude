@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Stillwater · a sunset lake</title>
+<style>
+  :root { color-scheme: dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #160d1a;
+    overflow: hidden;
+    font-family: ui-serif, Georgia, "Times New Roman", serif;
+    -webkit-tap-highlight-color: transparent;
+    cursor: default;
+  }
+  #scene { display: block; width: 100vw; height: 100vh; }
+
+  #vignette {
+    position: fixed; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse 125% 95% at 50% 46%,
+      rgba(0,0,0,0) 58%, rgba(20,6,26,0.40) 100%);
+    mix-blend-mode: multiply;
+  }
+
+  #gate {
+    position: fixed; inset: 0; z-index: 10;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 1.6rem;
+    background: radial-gradient(ellipse at 50% 62%, #46243f 0%, #241433 55%, #140d24 100%);
+    color: #f3e2d6; text-align: center;
+    transition: opacity 2.4s ease;
+  }
+  #gate h1 {
+    font-weight: 400; font-size: clamp(2rem, 6vw, 3.4rem);
+    letter-spacing: 0.18em; opacity: 0.95;
+    text-shadow: 0 0 34px rgba(255,180,120,0.35);
+  }
+  #gate p {
+    font-size: clamp(0.85rem, 2.4vw, 1.05rem);
+    letter-spacing: 0.08em; opacity: 0.62; font-style: italic;
+    max-width: 34ch; line-height: 1.7;
+  }
+  #enter {
+    margin-top: 0.6rem;
+    border: 1px solid rgba(255,200,160,0.4);
+    background: rgba(255,200,160,0.05);
+    color: #ffe8d6;
+    padding: 0.85rem 2.4rem; border-radius: 999px;
+    font-family: inherit; font-size: 0.95rem; letter-spacing: 0.22em;
+    cursor: pointer; transition: all 0.6s ease;
+    backdrop-filter: blur(2px);
+  }
+  #enter:hover {
+    background: rgba(255,200,160,0.14);
+    border-color: rgba(255,215,180,0.7);
+    box-shadow: 0 0 40px rgba(255,170,110,0.28);
+  }
+  #gate.hidden { opacity: 0; pointer-events: none; }
+
+  #mute {
+    position: fixed; right: 18px; bottom: 16px; z-index: 9;
+    width: 34px; height: 34px; border-radius: 50%;
+    border: 1px solid rgba(255,205,170,0.25);
+    background: rgba(40,20,30,0.35);
+    color: rgba(255,225,205,0.75);
+    font-size: 15px; cursor: pointer; backdrop-filter: blur(3px);
+    display: none; align-items: center; justify-content: center;
+    transition: opacity 1.2s ease, background 0.4s;
+    opacity: 0.35;
+  }
+  #mute:hover { opacity: 0.9; background: rgba(60,30,42,0.6); }
+</style>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+  <div id="vignette"></div>
+  <button id="mute" title="sound">♪</button>
+
+  <div id="gate">
+    <h1>Stillwater</h1>
+    <p>A lake at sunset.<br>Drag the sun. Touch the water or the clouds.</p>
+    <button id="enter">B&nbsp;&nbsp;E&nbsp;&nbsp;G&nbsp;&nbsp;I&nbsp;&nbsp;N</button>
+  </div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   STILLWATER — a tranquil lake at sunset
+   ============================================================ */
+
+const canvas = document.getElementById('scene');
+const ctx = canvas.getContext('2d');
+const PI2 = Math.PI * 2;
+
+let W = 0, H = 0, DPR = 1;
+let horizon = 0;
+let t = 0;
+
+function rand(a, b) { return a + Math.random() * (b - a); }
+function lerp(a, b, x) { return a + (b - a) * x; }
+function clamp(x, a, b) { return x < a ? a : x > b ? b : x; }
+function hash(n){ const s = Math.sin(n) * 43758.5453123; return s - Math.floor(s); }
+function vnoise(x){
+  const i = Math.floor(x), f = x - i;
+  const u = f*f*(3-2*f);
+  return lerp(hash(i), hash(i+1), u);
+}
+
+/* ============================================================
+   CLOUDS — soft sunset-lit puffs, pre-rendered with padding
+   ============================================================ */
+let clouds = [];
+function makeCloudSprite() {
+  const w0 = rand(180, 360);
+  const h0 = w0 * rand(0.34, 0.50);
+  const pad = h0 * 0.85;
+  const w = Math.round(w0 + pad * 2);
+  const h = Math.round(h0 + pad * 2);
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const x2 = c.getContext('2d');
+
+  const puffs = 7 + Math.floor(Math.random() * 6);
+  for (let i = 0; i < puffs; i++) {
+    const u = i / (puffs - 1);
+    const px = pad + w0 * (0.12 + 0.76 * u) + rand(-0.04, 0.04) * w0;
+    const py = pad + h0 * (0.55 + rand(-0.30, 0.18));
+    const pr = h0 * rand(0.30, 0.52);
+    const g = x2.createRadialGradient(px, py, 0, px, py, pr);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.55, 'rgba(255,255,255,0.6)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    x2.fillStyle = g;
+    x2.beginPath(); x2.arc(px, py, pr, 0, PI2); x2.fill();
+  }
+
+  x2.globalCompositeOperation = 'source-in';
+  const vg = x2.createLinearGradient(0, pad * 0.4, 0, h - pad * 0.4);
+  vg.addColorStop(0.00, 'rgba(104,84,148,0.95)');
+  vg.addColorStop(0.42, 'rgba(196,118,158,0.95)');
+  vg.addColorStop(0.74, 'rgba(255,162,112,0.96)');
+  vg.addColorStop(1.00, 'rgba(255,206,150,0.98)');
+  x2.fillStyle = vg;
+  x2.fillRect(0, 0, w, h);
+  return { canvas: c, w, h };
+}
+function buildClouds() {
+  clouds = [];
+  const n = clamp(Math.round(W / 180) + 8, 12, 22);  // more clouds, richer sunset
+  for (let i = 0; i < n; i++) {
+    const sprite = makeCloudSprite();
+    const scale = rand(0.48, 1.20);
+    clouds.push({
+      sprite, scale,
+      x: rand(-sprite.w * scale, W),
+      y: rand(H * 0.02, horizon * 0.68),
+      speed: rand(1.2, 7.0),
+      alpha: rand(0.60, 0.95),
+    });
+  }
+  clouds.sort((a, b) => a.scale - b.scale);
+}
+
+/* ============================================================
+   CLOUD DISTORTIONS — punch-through warping
+   ============================================================ */
+let cloudDistortions = [];
+
+function spawnCloudDistortion(px, py, hold) {
+  const holdK = clamp((hold || 0) / 2.0, 0, 1);
+  cloudDistortions.push({
+    x: px, y: py,
+    life: 0, maxLife: 0.8 + holdK * 1.2,
+    radius: 80 + holdK * 260,
+    strength: 0.5 + holdK * 0.8,
+    push: rand(40, 120) * (0.6 + holdK),
+  });
+  if (cloudDistortions.length > 32) cloudDistortions.shift();
+  Sound.airy(px / W, 0.35 + holdK * 0.5);
+}
+
+function updateCloudDistortions(dt) {
+  for (let i = cloudDistortions.length - 1; i >= 0; i--) {
+    cloudDistortions[i].life += dt;
+    if (cloudDistortions[i].life >= cloudDistortions[i].maxLife) {
+      cloudDistortions.splice(i, 1);
+    }
+  }
+}
+
+/* ============================================================
+   LOW MIST
+   ============================================================ */
+let mist = [];
+function buildMist() {
+  mist = [];
+  for (let i = 0; i < 5; i++) {
+    mist.push({
+      y: horizon - rand(-8, 50) - i * 7,
+      x: rand(0, W),
+      speed: rand(3, 9) * (Math.random() < 0.5 ? 1 : -1),
+      amp: rand(8, 22),
+      h: rand(36, 80),
+      alpha: rand(0.03, 0.08),
+    });
+  }
+}
+
+/* ============================================================
+   GNATS
+   ============================================================ */
+let flies = [];
+function buildFlies() {
+  flies = [];
+  const n = Math.round(W / 110) + 5;
+  for (let i = 0; i < n; i++) {
+    flies.push({
+      x: rand(0, W),
+      y: rand(horizon - 30, H * 0.9),
+      nx: rand(0, 1000), ny: rand(0, 1000),
+      r: rand(0.9, 2.0),
+      hue: rand(30, 48),
+      blink: rand(0.4, 1.1),
+      ph: rand(0, PI2),
+    });
+  }
+}
+
+/* ============================================================
+   REEDS
+   ============================================================ */
+let reeds = [];
+function buildReeds() {
+  reeds = [];
+  const n = Math.round(W / 38) + 6;
+  for (let i = 0; i < n; i++) {
+    reeds.push({
+      x: rand(-20, W + 20),
+      h: rand(H * 0.14, H * 0.34),
+      w: rand(2, 4.5),
+      sway: rand(0.5, 1.3),
+      ph: rand(0, PI2),
+      bend: rand(0.3, 0.9) * (Math.random() < 0.5 ? 1 : -1),
+      head: Math.random() < 0.55,
+      shade: rand(0, 1),
+    });
+  }
+}
+
+/* distant shoreline ridge */
+let ridges = [];
+function buildRidges() {
+  ridges = [];
+  for (let layer = 0; layer < 3; layer++) {
+    const pts = [];
+    const seg = 14 + layer * 4;
+    const baseY = horizon - 6;
+    const height = (34 - layer * 9);
+    for (let i = 0; i <= seg; i++) {
+      const x = (i / seg) * W;
+      const n = vnoise(i * 0.6 + layer * 31.7) + vnoise(i * 1.7 + layer * 11.3) * 0.5;
+      pts.push({ x, y: baseY - n * height - layer * 5 });
+    }
+    ridges.push({ pts, layer });
+  }
+}
+
+/* ============================================================
+   RESIZE
+   ============================================================ */
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = Math.round(W * DPR);
+  canvas.height = Math.round(H * DPR);
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  horizon = H * 0.54;
+  buildClouds();
+  buildMist();
+  buildFlies();
+  buildReeds();
+  buildRidges();
+}
+window.addEventListener('resize', resize);
+
+/* sun — draggable, kept low above the horizon */
+const sun = { x: 0, y: 0, r: 0 };
+let sunInit = false;
+function placeSun() {
+  sun.r = clamp(Math.min(W, H) * 0.06, 32, 92);
+  if (!sunInit) { sun.x = W * 0.5; sun.y = horizon - sun.r * 0.8; sunInit = true; }
+  sun.x = clamp(sun.x, 0, W);
+  const highest = horizon - H * 0.16;
+  const lowest  = horizon - sun.r * 0.20;
+  sun.y = clamp(sun.y, highest, lowest);
+}
+
+/* ============================================================
+   SKY
+   ============================================================ */
+function drawSky() {
+  const breathe = Math.sin(t * 0.02) * 4;
+  const g = ctx.createLinearGradient(0, 0, 0, horizon);
+  g.addColorStop(0.00, `hsl(${244 + breathe}, 46%, 20%)`);
+  g.addColorStop(0.30, `hsl(${278 + breathe}, 44%, 30%)`);
+  g.addColorStop(0.55, `hsl(${326 + breathe}, 52%, 42%)`);
+  g.addColorStop(0.76, `hsl(${18  + breathe}, 78%, 54%)`);
+  g.addColorStop(1.00, `hsl(${40  + breathe}, 88%, 62%)`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, horizon);
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const glow = ctx.createRadialGradient(sun.x, horizon, sun.r * 0.5, sun.x, horizon, Math.max(W, H) * 0.55);
+  glow.addColorStop(0, 'rgba(255,210,140,0.40)');
+  glow.addColorStop(0.25, 'rgba(255,160,90,0.18)');
+  glow.addColorStop(0.6, 'rgba(255,120,80,0.05)');
+  glow.addColorStop(1, 'rgba(255,120,80,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, W, horizon);
+  ctx.restore();
+}
+
+function drawClouds(dt) {
+  ctx.save();
+  for (const c of clouds) {
+    c.x += c.speed * dt;
+    const sw = c.sprite.w * c.scale, sh = c.sprite.h * c.scale;
+    if (c.x > W + 20) c.x = -sw - 20;
+    const yy = c.y + Math.sin(t * 0.1 + c.x * 0.002) * 4;
+    ctx.globalAlpha = c.alpha;
+    ctx.drawImage(c.sprite.canvas, c.x, yy, sw, sh);
+
+    // distortion effect: displaced copies of the cloud with fading opacity
+    for (const d of cloudDistortions) {
+      const dx = (c.x + sw/2) - d.x;
+      const dy = (yy + sh/2) - d.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > d.radius) continue;
+      const k = d.life / d.maxLife;
+      const a = (1 - k) * (1 - dist / d.radius);
+      if (a <= 0.02) continue;
+      // push the cloud copy outward from the distortion center
+      const ang = Math.atan2(dy, dx);
+      const pushDist = (1 - dist / d.radius) * d.push;
+      const px = c.x + Math.cos(ang) * pushDist;
+      const py = yy + Math.sin(ang) * pushDist;
+      const scale = 0.8 + (1 - dist / d.radius) * 0.4;
+      ctx.save();
+      ctx.globalAlpha = c.alpha * a * 0.6;
+      ctx.drawImage(c.sprite.canvas, px, py, sw * scale, sh * scale);
+      ctx.restore();
+    }
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+function drawSun() {
+  const { x, y, r } = sun;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const halo = ctx.createRadialGradient(x, y, r * 0.4, x, y, r * 9);
+  halo.addColorStop(0, 'rgba(255,224,160,0.50)');
+  halo.addColorStop(0.14, 'rgba(255,170,95,0.30)');
+  halo.addColorStop(0.42, 'rgba(255,120,80,0.10)');
+  halo.addColorStop(1, 'rgba(255,120,80,0)');
+  ctx.fillStyle = halo;
+  ctx.beginPath(); ctx.arc(x, y, r * 9, 0, PI2); ctx.fill();
+  ctx.restore();
+
+  const disc = ctx.createRadialGradient(x, y - r * 0.15, r * 0.1, x, y, r);
+  disc.addColorStop(0, '#fff7e6');
+  disc.addColorStop(0.5, '#ffd884');
+  disc.addColorStop(0.85, '#ff9f52');
+  disc.addColorStop(1, 'rgba(255,140,72,0.9)');
+  ctx.fillStyle = disc;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, PI2); ctx.fill();
+}
+
+function drawRidges() {
+  for (const rg of ridges) {
+    const l = rg.layer;
+    ctx.beginPath();
+    ctx.moveTo(0, horizon);
+    ctx.lineTo(rg.pts[0].x, rg.pts[0].y);
+    for (let i = 1; i < rg.pts.length; i++) {
+      const p = rg.pts[i], pr = rg.pts[i-1];
+      const mx = (p.x + pr.x) / 2, my = (p.y + pr.y) / 2;
+      ctx.quadraticCurveTo(pr.x, pr.y, mx, my);
+    }
+    ctx.lineTo(W, horizon);
+    ctx.closePath();
+    ctx.fillStyle = `hsl(286, 30%, ${9 + l * 4}%)`;
+    ctx.fill();
+  }
+}
+
+function drawMist(dt) {
+  ctx.save();
+  for (const m of mist) {
+    m.x += m.speed * dt;
+    const yy = m.y + Math.sin(t * 0.2 + m.x * 0.001) * 4;
+    const g = ctx.createLinearGradient(0, yy - m.h/2, 0, yy + m.h/2);
+    g.addColorStop(0, 'rgba(255,206,180,0)');
+    g.addColorStop(0.5, `rgba(255,210,185,${m.alpha})`);
+    g.addColorStop(1, 'rgba(255,206,180,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(0, yy);
+    for (let x = 0; x <= W; x += 40) {
+      const wy = yy + Math.sin((x + m.x) * 0.004 + m.ph) * m.amp * 0.25;
+      ctx.lineTo(x, wy);
+    }
+    ctx.lineTo(W, yy + m.h);
+    ctx.lineTo(0, yy + m.h);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/* ============================================================
+   WATER
+   ============================================================ */
+function drawWater(dt) {
+  const g = ctx.createLinearGradient(0, horizon, 0, H);
+  g.addColorStop(0.00, 'hsl(36, 78%, 50%)');
+  g.addColorStop(0.12, 'hsl(20, 62%, 38%)');
+  g.addColorStop(0.40, 'hsl(322, 42%, 27%)');
+  g.addColorStop(0.72, 'hsl(268, 46%, 17%)');
+  g.addColorStop(1.00, 'hsl(248, 52%, 9%)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, horizon, W, H - horizon);
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, horizon, W, H - horizon); ctx.clip();
+  drawCloudReflections();
+  ctx.restore();
+
+  drawSunReflection();
+  drawAmbientRipples();
+  drawRipples();
+}
+
+function drawCloudReflections() {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (const c of clouds) {
+    const sw = c.sprite.w * c.scale, sh = c.sprite.h * c.scale;
+    const wob = Math.sin(t * 0.6 + c.x * 0.01) * 3;
+    const ry = horizon + 3 + (horizon - (c.y + sh)) * 0.10;
+    ctx.save();
+    ctx.translate(c.x + sw / 2 + wob, ry);
+    ctx.scale(c.scale, -c.scale);
+    ctx.globalAlpha = c.alpha * 0.16;
+    ctx.drawImage(c.sprite.canvas, -c.sprite.w / 2, 0);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function drawSunReflection() {
+  const cx = sun.x;
+  const top = horizon;
+  const span = H - top;
+  const wNear = sun.r * 0.55;
+  const wFar  = sun.r * 4.0;
+  const halfWidthAt = (depth) => wNear + (wFar - wNear) * depth * depth;
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const rowH = 5;
+  const rows = Math.ceil(span / rowH);
+  for (let i = 0; i < rows; i++) {
+    const y = top + i * rowH + rowH * 0.5;
+    const depth = (y - top) / span;
+    const hw = halfWidthAt(depth);
+    const phase = t * (0.8 + depth * 1.4);
+
+    const rowAlpha = 0.16 * (1 - depth * 0.6);
+    const g = ctx.createLinearGradient(cx - hw, 0, cx + hw, 0);
+    g.addColorStop(0.0, 'rgba(255,190,110,0)');
+    g.addColorStop(0.5, `rgba(255,196,120,${rowAlpha})`);
+    g.addColorStop(1.0, 'rgba(255,190,110,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(cx - hw, y - rowH * 0.5, hw * 2, rowH + 0.5);
+
+    const segs = 4 + Math.floor(depth * 6);
+    for (let sgi = 0; sgi < segs; sgi++) {
+      const n = vnoise(i * 0.7 + sgi * 13.1 + phase);
+      const off = (n - 0.5) * 2 * hw;
+      const gauss = Math.exp(-(off * off) / (2 * (hw * 0.5) * (hw * 0.5)));
+      const flick = 0.5 + 0.5 * Math.sin(phase * 3 + sgi * 2.1 + i * 0.3);
+      const w = (3 + n * 13) * (0.5 + depth);
+      const a = (0.06 + 0.18 * flick) * gauss * (1 - depth * 0.3);
+      if (a < 0.01) continue;
+      ctx.fillStyle = `rgba(255,234,190,${a})`;
+      ctx.fillRect(cx + off - w / 2, y - 1, w, 2);
+    }
+  }
+  ctx.restore();
+}
+
+function drawAmbientRipples() {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 26; i++) {
+    const depth = i / 26;
+    const y = horizon + depth * depth * (H - horizon);
+    const drift = Math.sin(t * 0.5 + i * 0.8) * 12;
+    const a = 0.010 + 0.018 * (1 - depth);
+    ctx.strokeStyle = `rgba(255,210,170,${a})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 0; x <= W; x += 28) {
+      const yy = y + Math.sin(x * 0.012 + t * 0.7 + i) * (1.5 + depth * 3) + drift * 0.1;
+      if (x === 0) ctx.moveTo(x, yy); else ctx.lineTo(x, yy);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/* ============================================================
+   RIPPLES — 3D embossed rings on the water only
+   ============================================================ */
+const HOLD_MAX = 2.0;
+let ripples = [];
+let charging = false, chargeStart = 0, chargeX = 0, chargeY = 0;
+
+function spawnWaterRipple(px, py, hold) {
+  if (py < horizon + 2) return;
+  const depth = (py - horizon) / (H - horizon);
+  const holdK = clamp((hold || 0) / HOLD_MAX, 0, 1);
+  const size = 160 + holdK * 440;
+  ripples.push({
+    x: px, y: py, life: 0,
+    max: 2.6 + holdK * 3.0,
+    maxR: size * (0.55 + depth),
+    squash: 0.18 + depth * 0.30,
+    fronts: 3 + Math.round(holdK * 5),
+    interval: 0.17,
+    strength: 0.75 + holdK * 0.35,
+  });
+  if (ripples.length > 60) ripples.shift();
+  Sound.drip(px / W, 0.4 + holdK * 0.5);
+}
+
+function updateRipples(dt) {
+  for (let i = ripples.length - 1; i >= 0; i--) {
+    ripples[i].life += dt;
+    if (ripples[i].life / ripples[i].max >= 1) ripples.splice(i, 1);
+  }
+}
+
+function renderRipple(r) {
+  const k = r.life / r.max;
+  const overall = 1 - k;
+  const frontDur = r.max * 0.85;
+  const lit = '255,232,196';
+  const shd = '26,12,32';
+
+  for (let j = 0; j < r.fronts; j++) {
+    const fl = r.life - j * r.interval;
+    if (fl <= 0) continue;
+    const fk = fl / frontDur;
+    if (fk >= 1) continue;
+    const ease = 1 - Math.pow(1 - fk, 2.2);
+    const rr = ease * r.maxR;
+    if (rr <= 1) continue;
+    const a = r.strength * Math.pow(1 - fk, 1.3) * 0.5 * overall;
+    if (a <= 0.004) continue;
+    const w = Math.max(0.8, 3.0 * (1 - fk));
+    const d = Math.max(1, w * 0.6);
+
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.lineWidth = w;
+    ctx.strokeStyle = `rgba(${shd},${a * 0.5})`;
+    ctx.beginPath();
+    ctx.ellipse(r.x, r.y + d, rr, rr * r.squash, 0, 0, PI2);
+    ctx.stroke();
+
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(${lit},${a})`;
+    ctx.beginPath();
+    ctx.ellipse(r.x, r.y - d, rr, rr * r.squash, 0, 0, PI2);
+    ctx.stroke();
+  }
+
+  if (k < 0.30) {
+    const kk = k / 0.30;
+    const dr = (1 - kk) * (r.maxR * 0.11 + 6);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = `rgba(${shd},${0.22 * (1 - kk)})`;
+    ctx.beginPath();
+    ctx.ellipse(r.x, r.y + dr * 0.45, dr, dr * r.squash, 0, 0, PI2);
+    ctx.fill();
+    ctx.globalCompositeOperation = 'lighter';
+    const dg = ctx.createRadialGradient(r.x, r.y - dr * 0.3, 0, r.x, r.y - dr * 0.2, dr * 1.5);
+    dg.addColorStop(0, `rgba(${lit},${0.55 * (1 - kk)})`);
+    dg.addColorStop(1, `rgba(${lit},0)`);
+    ctx.fillStyle = dg;
+    ctx.beginPath();
+    ctx.ellipse(r.x, r.y - dr * 0.2, dr * 1.5, dr * 1.5 * r.squash, 0, 0, PI2);
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function drawRipples() {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, horizon, W, H - horizon);
+  ctx.clip();
+
+  for (const r of ripples) {
+    renderRipple(r);
+  }
+
+  // preview ring while holding
+  if (charging && chargeY >= horizon) {
+    const hold = clamp(t - chargeStart, 0, HOLD_MAX);
+    const holdK = hold / HOLD_MAX;
+    const depth = (chargeY - horizon) / (H - horizon);
+    const squash = 0.18 + depth * 0.30;
+    const rr = (12 + holdK * 80) * 0.7;
+    const a = 0.10 + 0.12 * holdK + 0.03 * Math.sin(t * 5);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(255,228,188,${a})`;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.ellipse(chargeX, chargeY, rr, rr * squash, 0, 0, PI2);
+    ctx.stroke();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.restore();
+}
+
+function drawFlies(dt) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (const f of flies) {
+    f.nx += dt * 0.12; f.ny += dt * 0.12;
+    f.x += (vnoise(f.nx) - 0.5) * 26 * dt + 4 * dt;
+    f.y += (vnoise(f.ny) - 0.5) * 22 * dt;
+    if (f.x < -20) f.x = W + 20; if (f.x > W + 20) f.x = -20;
+    if (f.y < horizon - 50) f.y = horizon - 50;
+    if (f.y > H * 0.95) f.y = H * 0.95;
+    const blink = Math.pow(0.5 + 0.5 * Math.sin(t * f.blink + f.ph), 2.5);
+    const a = blink * 0.8;
+    if (a < 0.02) continue;
+    const glow = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r * 7);
+    glow.addColorStop(0, `hsla(${f.hue},95%,78%,${a})`);
+    glow.addColorStop(0.4, `hsla(${f.hue},95%,66%,${a*0.3})`);
+    glow.addColorStop(1, `hsla(${f.hue},95%,60%,0)`);
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 7, 0, PI2); ctx.fill();
+    ctx.fillStyle = `hsla(${f.hue},98%,90%,${a})`;
+    ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, PI2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawReeds() {
+  ctx.save();
+  for (const r of reeds) {
+    const baseY = H + 4;
+    const topY = baseY - r.h;
+    const swayX = Math.sin(t * r.sway + r.ph) * (8 * r.bend)
+                + Math.sin(t * 0.3 + r.ph) * 3;
+    ctx.strokeStyle = `hsl(320, 22%, ${4 + r.shade * 4}%)`;
+    ctx.lineWidth = r.w;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(r.x, baseY);
+    ctx.quadraticCurveTo(r.x + swayX * 0.4, (baseY + topY) / 2, r.x + swayX, topY);
+    ctx.stroke();
+    if (r.head) {
+      ctx.fillStyle = `hsl(28, 30%, ${8 + r.shade * 5}%)`;
+      ctx.beginPath();
+      ctx.ellipse(r.x + swayX, topY, r.w * 1.4, r.h * 0.06, 0, 0, PI2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+/* ============================================================
+   MAIN LOOP
+   ============================================================ */
+let last = performance.now();
+let running = false;
+
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 0.05);
+  last = now;
+  t += dt;
+
+  placeSun();
+  updateRipples(dt);
+  updateCloudDistortions(dt);
+
+  drawSky();
+  drawClouds(dt);
+  drawSun();
+  drawRidges();
+  drawMist(dt);
+  drawWater(dt);
+  drawFlies(dt);
+  drawReeds();
+
+  requestAnimationFrame(frame);
+}
+
+/* ============================================================
+   GENERATIVE AMBIENT SOUND
+   ============================================================ */
+const Sound = (() => {
+  let actx = null, master = null, wet = null, ready = false, muted = false;
+  let droneGain = null, convolver = null;
+
+  const chordHz = [73.42, 110.0, 146.83, 220.0, 329.63];
+  const penta = [293.66, 329.63, 369.99, 440.0, 493.88,
+                 587.33, 659.25, 739.99, 880.0, 987.77];
+
+  function makeReverbIR(seconds, decay) {
+    const rate = actx.sampleRate;
+    const len = Math.floor(rate * seconds);
+    const buf = actx.createBuffer(2, len, rate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++) {
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+      }
+    }
+    return buf;
+  }
+
+  function init() {
+    if (ready) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    actx = new AC();
+
+    master = actx.createGain();
+    master.gain.value = 0.0;
+    master.connect(actx.destination);
+
+    convolver = actx.createConvolver();
+    convolver.buffer = makeReverbIR(4.5, 2.2);
+    wet = actx.createGain();
+    wet.gain.value = 0.55;
+    convolver.connect(wet);
+    wet.connect(master);
+
+    droneGain = actx.createGain();
+    droneGain.gain.value = 0.16;
+    const droneFilter = actx.createBiquadFilter();
+    droneFilter.type = 'lowpass';
+    droneFilter.frequency.value = 600;
+    droneFilter.Q.value = 0.6;
+    droneGain.connect(droneFilter);
+    droneFilter.connect(master);
+    droneFilter.connect(convolver);
+
+    const lfo = actx.createOscillator();
+    const lfoGain = actx.createGain();
+    lfo.frequency.value = 0.045;
+    lfoGain.gain.value = 240;
+    lfo.connect(lfoGain); lfoGain.connect(droneFilter.frequency);
+    lfo.start();
+
+    chordHz.forEach((hz, idx) => {
+      [-0.12, 0.12].forEach(det => {
+        const o = actx.createOscillator();
+        o.type = idx < 2 ? 'sine' : 'triangle';
+        o.frequency.value = hz;
+        o.detune.value = det * 100;
+        const g = actx.createGain();
+        g.gain.value = 0.5 / (idx + 1.4);
+        const ag = actx.createOscillator();
+        const agg = actx.createGain();
+        ag.frequency.value = 0.05 + idx * 0.017 + det;
+        agg.gain.value = g.gain.value * 0.4;
+        ag.connect(agg); agg.connect(g.gain);
+        ag.start();
+        o.connect(g); g.connect(droneGain);
+        o.start();
+      });
+    });
+
+    const noiseBuf = actx.createBuffer(1, actx.sampleRate * 4, actx.sampleRate);
+    const nd = noiseBuf.getChannelData(0);
+    let b0=0,b1=0,b2=0;
+    for (let i = 0; i < nd.length; i++) {
+      const white = Math.random() * 2 - 1;
+      b0 = 0.99765*b0 + white*0.0990460;
+      b1 = 0.96300*b1 + white*0.2965164;
+      b2 = 0.57000*b2 + white*1.0526913;
+      nd[i] = (b0 + b1 + b2 + white*0.1848) * 0.12;
+    }
+    const noise = actx.createBufferSource();
+    noise.buffer = noiseBuf; noise.loop = true;
+    const nFilter = actx.createBiquadFilter();
+    nFilter.type = 'bandpass';
+    nFilter.frequency.value = 420;
+    nFilter.Q.value = 0.5;
+    const nGain = actx.createGain();
+    nGain.gain.value = 0.06;
+    noise.connect(nFilter); nFilter.connect(nGain); nGain.connect(master);
+    nGain.connect(convolver);
+    const nLfo = actx.createOscillator();
+    const nLfoG = actx.createGain();
+    nLfo.frequency.value = 0.07;
+    nLfoG.gain.value = 0.035;
+    nLfo.connect(nLfoG); nLfoG.connect(nGain.gain);
+    nLfo.start();
+    const nfLfo = actx.createOscillator();
+    const nfLfoG = actx.createGain();
+    nfLfo.frequency.value = 0.03;
+    nfLfoG.gain.value = 180;
+    nfLfo.connect(nfLfoG); nfLfoG.connect(nFilter.frequency);
+    nfLfo.start();
+    noise.start();
+
+    ready = true;
+    scheduleChime();
+  }
+
+  function chime(hz, when, vel) {
+    const o = actx.createOscillator();
+    o.type = 'sine';
+    o.frequency.value = hz;
+    const o2 = actx.createOscillator();
+    o2.type = 'sine';
+    o2.frequency.value = hz * 2.01;
+    const g = actx.createGain();
+    const g2 = actx.createGain();
+    const v = vel * 0.12;
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(v, when + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + 4.5);
+    g2.gain.setValueAtTime(0, when);
+    g2.gain.linearRampToValueAtTime(v * 0.4, when + 0.02);
+    g2.gain.exponentialRampToValueAtTime(0.0001, when + 2.6);
+    o.connect(g); o2.connect(g2);
+    const send = actx.createGain(); send.gain.value = 1;
+    g.connect(send); g2.connect(send);
+    send.connect(master);
+    const wsend = actx.createGain(); wsend.gain.value = 0.8;
+    send.connect(wsend);
+    wsend.connect(convolver);
+    o.start(when); o2.start(when);
+    o.stop(when + 4.8); o2.stop(when + 2.8);
+  }
+
+  function scheduleChime() {
+    if (!ready || muted) { setTimeout(scheduleChime, 1500); return; }
+    const now = actx.currentTime;
+    const notes = Math.random() < 0.3 ? 2 : 1;
+    for (let i = 0; i < notes; i++) {
+      const hz = penta[Math.floor(Math.random() * penta.length)];
+      chime(hz, now + i * rand(0.25, 0.8), rand(0.5, 1));
+    }
+    setTimeout(scheduleChime, rand(4500, 11000));
+  }
+
+  function drip(pan, vel) {
+    if (!ready || muted || !actx) return;
+    const v = clamp(vel == null ? 0.5 : vel, 0, 1);
+    const now = actx.currentTime;
+    const out = actx.createGain();
+    const peak = 0.03 + v * 0.05;
+    out.gain.setValueAtTime(0, now);
+    out.gain.linearRampToValueAtTime(peak, now + 0.01);
+    out.gain.exponentialRampToValueAtTime(0.0001, now + 0.7);
+    const p = actx.createStereoPanner ? actx.createStereoPanner() : null;
+    if (p) { p.pan.value = clamp((pan - 0.5) * 1.4, -1, 1); out.connect(p); p.connect(master); p.connect(convolver); }
+    else { out.connect(master); out.connect(convolver); }
+    const o = actx.createOscillator();
+    o.type = 'sine';
+    const f0 = rand(600, 940) * (1 - v * 0.35);
+    o.frequency.setValueAtTime(f0, now);
+    o.frequency.exponentialRampToValueAtTime(f0 * 0.42, now + 0.17);
+    o.connect(out);
+    const ob = actx.createOscillator();
+    ob.type = 'sine';
+    const bg = actx.createGain();
+    bg.gain.value = 0.5 * v;
+    ob.frequency.setValueAtTime(f0 * 0.5, now);
+    ob.frequency.exponentialRampToValueAtTime(f0 * 0.28, now + 0.2);
+    ob.connect(bg); bg.connect(out);
+    o.start(now); ob.start(now);
+    o.stop(now + 0.75); ob.stop(now + 0.75);
+  }
+
+  function airy(pan, vel) {
+    if (!ready || muted || !actx) return;
+    const v = clamp(vel == null ? 0.5 : vel, 0, 1);
+    const now = actx.currentTime;
+    const out = actx.createGain();
+    const peak = 0.018 + v * 0.03;
+    out.gain.setValueAtTime(0, now);
+    out.gain.linearRampToValueAtTime(peak, now + 0.10);
+    out.gain.exponentialRampToValueAtTime(0.0001, now + 1.4);
+    const p = actx.createStereoPanner ? actx.createStereoPanner() : null;
+    if (p) { p.pan.value = clamp((pan - 0.5) * 1.4, -1, 1); out.connect(p); p.connect(master); p.connect(convolver); }
+    else { out.connect(master); out.connect(convolver); }
+    [1, 1.5].forEach((mult, i) => {
+      const o = actx.createOscillator();
+      o.type = 'sine';
+      const f = rand(760, 1080) * mult;
+      o.frequency.setValueAtTime(f, now);
+      o.frequency.linearRampToValueAtTime(f * 1.4, now + 0.7);
+      const g = actx.createGain();
+      g.gain.value = i === 0 ? 1 : 0.45;
+      o.connect(g); g.connect(out);
+      o.start(now); o.stop(now + 1.5);
+    });
+  }
+
+  function start() {
+    init();
+    if (!actx) return;
+    if (actx.state === 'suspended') actx.resume();
+    fade(0.9, 3.5);
+    muted = false;
+  }
+  function fade(to, secs) {
+    if (!master) return;
+    const now = actx.currentTime;
+    master.gain.cancelScheduledValues(now);
+    master.gain.setValueAtTime(master.gain.value, now);
+    master.gain.linearRampToValueAtTime(to, now + secs);
+  }
+  function toggle() {
+    if (!ready) { start(); return false; }
+    muted = !muted;
+    fade(muted ? 0.0 : 0.9, muted ? 1.2 : 2.5);
+    return muted;
+  }
+  return { start, toggle, drip, airy };
+})();
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+resize();
+placeSun();
+drawSky(); drawClouds(0); drawSun(); drawRidges(); drawMist(0); drawWater(0); drawReeds();
+
+const gate = document.getElementById('gate');
+const enter = document.getElementById('enter');
+const muteBtn = document.getElementById('mute');
+
+function begin() {
+  if (running) return;
+  running = true;
+  Sound.start();
+  gate.classList.add('hidden');
+  muteBtn.style.display = 'flex';
+  last = performance.now();
+  requestAnimationFrame(frame);
+  setTimeout(() => gate.remove(), 2600);
+}
+enter.addEventListener('click', begin);
+gate.addEventListener('click', (e) => { if (e.target === gate) begin(); });
+
+/* ----- touch / mouse: drag the sun, or hold to ripple water or distort clouds ----- */
+let draggingSun = false;
+function pointerPos(e) {
+  const r = canvas.getBoundingClientRect();
+  const src = e.touches ? e.touches[0] : e;
+  return { x: src.clientX - r.left, y: src.clientY - r.top };
+}
+function onDown(e) {
+  if (!running) return;
+  const p = pointerPos(e);
+  const onSun = Math.hypot(p.x - sun.x, p.y - sun.y) < sun.r * 1.8;
+  if (onSun) {
+    draggingSun = true;
+  } else {
+    charging = true; chargeStart = t; chargeX = p.x; chargeY = p.y;
+  }
+  e.preventDefault();
+}
+function onMove(e) {
+  if (!running) return;
+  const p = pointerPos(e);
+  if (draggingSun) {
+    sun.x = p.x; sun.y = p.y;
+    e.preventDefault();
+  } else if (charging) {
+    chargeX = p.x;
+    chargeY = p.y;
+    e.preventDefault();
+  }
+}
+function onUp() {
+  if (charging) {
+    const hold = t - chargeStart;
+    if (chargeY < horizon) {
+      // sky — distort clouds
+      spawnCloudDistortion(chargeX, chargeY, hold);
+    } else {
+      // water — ripple
+      spawnWaterRipple(chargeX, chargeY, hold);
+    }
+  }
+  charging = false;
+  draggingSun = false;
+}
+canvas.addEventListener('mousedown', onDown);
+canvas.addEventListener('mousemove', onMove);
+window.addEventListener('mouseup', onUp);
+canvas.addEventListener('touchstart', onDown, { passive: false });
+canvas.addEventListener('touchmove', onMove, { passive: false });
+window.addEventListener('touchend', onUp);
+
+muteBtn.addEventListener('click', () => {
+  const m = Sound.toggle();
+  muteBtn.textContent = m ? '·' : '♪';
+  muteBtn.style.opacity = m ? '0.25' : '0.5';
+});
+</script>
+</body>
+</html>

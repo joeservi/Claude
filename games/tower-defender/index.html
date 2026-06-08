@@ -1,0 +1,1241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Tower Defender 3D</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #05060f; touch-action: none; font-family: -apple-system, system-ui, Arial, sans-serif; }
+  #c { display: block; width: 100vw; height: 100vh; }
+  /* Unified top bar: prominent row + stats row, compact against the top */
+  #topbar { position: fixed; top: 0; left: 0; right: 0; z-index: 50; padding: 6px 8px; background: rgba(12,18,34,0.8); border-bottom: 1px solid rgba(120,160,220,0.3); backdrop-filter: blur(6px); color: #eaf1ff; }
+  #topMain { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  #topMain .stat { display: flex; flex-direction: column; align-items: center; line-height: 1.1; flex: 1; }
+  #topMain .stat .lab { font-size: 9px; color: #8aa0c8; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; }
+  #topMain .stat .num { font-size: 17px; font-weight: 800; }
+  #topMain .wave .num { color: #cfe0ff; }
+  #topMain .coins .num { color: #ffe066; }
+  #topMain .hp .num { color: #6ee08a; }
+  #topMain .enemies .num { color: #ff9a6b; }
+  #uiButtons { display: flex; gap: 6px; }
+  .uiBtn2 { width: 36px; height: 36px; border: 1px solid rgba(120,160,220,0.25); border-radius: 9px; background: rgba(30,42,68,0.85); color: #cfe0ff; font-size: 16px; cursor: pointer; pointer-events: auto; }
+  .uiBtn2:active { transform: scale(0.92); }
+  #dashStats { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 5px; padding-top: 5px; border-top: 1px solid rgba(120,160,220,0.18); font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; color: #aabbdd; }
+  #dashStats span.s { white-space: nowrap; }
+  #dashStats .label { color: #8aa0c8; }
+  #dashStats .value { color: #7fffb0; }
+  .uiBtn { width: 44px; height: 44px; border: 1px solid rgba(120,160,220,0.25); border-radius: 12px; background: rgba(30,42,68,0.82); color: #cfe0ff; font-size: 19px; cursor: pointer; box-shadow: 0 3px 10px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.12); backdrop-filter: blur(4px); transition: all 0.15s; }
+  .uiBtn:active { transform: scale(0.92); }
+  #stick { position: fixed; left: 8px; right: 8px; bottom: 14px; height: 48px; z-index: 40; border-radius: 24px; background: linear-gradient(180deg, rgba(22,30,52,0.82), rgba(12,17,32,0.82)); border: 1px solid rgba(90,130,190,0.4); pointer-events: none; overflow: hidden; }
+  #stick .mid { position: absolute; left: 50%; top: 8px; bottom: 8px; width: 2px; transform: translateX(-50%); background: rgba(120,160,220,0.35); }
+  #knob { position: absolute; top: 4px; width: 78px; height: 40px; transform: translateX(-50%); border-radius: 20px; background: linear-gradient(180deg, #5ea0ff, #2456c8); box-shadow: 0 0 14px rgba(40,100,210,0.55), inset 0 2px 4px rgba(255,255,255,0.4); transition: box-shadow 0.15s; }
+  #knob::after { content: ''; position: absolute; left: 18%; right: 18%; top: 22%; height: 30%; border-radius: 8px; background: rgba(255,255,255,0.35); }
+  .overlay { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; background: rgba(5,8,18,0.9); color: #e8eef7; padding: 20px; z-index: 200; }
+  .overlay.show { display: flex; }
+  .panel { background: #141b30; border: 1px solid #2a3a5c; border-radius: 16px; padding: 20px; width: 100%; max-width: 460px; max-height: 88vh; overflow-y: auto; box-shadow: 0 12px 40px rgba(0,0,0,0.5); }
+  .panel h1 { font-size: 26px; text-align: center; margin-bottom: 4px; }
+  .panel .sub { text-align: center; color: #8aa0c8; margin-bottom: 16px; font-size: 14px; }
+  .coins { text-align: center; font-size: 20px; color: #ffed4e; font-weight: bold; margin-bottom: 16px; }
+  .shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .shop-col h3 { font-size: 14px; color: #8aa0c8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; text-align: center; }
+  .up { width: 100%; text-align: left; padding: 10px 12px; margin-bottom: 8px; background: #1d2740; border: 1px solid #2a3a5c; border-radius: 10px; color: #e8eef7; cursor: pointer; transition: 0.12s; font-size: 13px; }
+  .up:active { transform: scale(0.97); }
+  .up:disabled { opacity: 0.4; cursor: not-allowed; }
+  .up .name { font-weight: bold; display: block; }
+  .up .lvl { color: #7fe0a0; font-size: 11px; }
+  .up .cost { color: #ffed4e; float: right; font-weight: bold; }
+  .btn { width: 100%; padding: 15px; border: none; border-radius: 12px; background: linear-gradient(135deg, #3b82f6, #6366f1); color: white; font-size: 18px; font-weight: bold; cursor: pointer; margin-top: 4px; }
+  /* Compact shop so everything fits without scrolling */
+  #shopScreen .panel { padding: 12px 14px; max-height: 94vh; }
+  #shopScreen .panel h1 { font-size: 19px; margin-bottom: 2px; }
+  #shopScreen .panel .sub { font-size: 11px; margin-bottom: 8px; }
+  #shopScreen .coins { font-size: 16px; margin-bottom: 6px; }
+  #shopScreen .shop-grid { gap: 7px; margin-bottom: 8px; }
+  #shopScreen .shop-col h3 { font-size: 12px; margin-bottom: 5px; }
+  #shopScreen .up { padding: 6px 9px; margin-bottom: 6px; font-size: 12px; }
+  #shopScreen .up .desc, #shopScreen .up span[style] { font-size: 10px !important; }
+  #shopScreen .btn { padding: 11px; font-size: 16px; }
+  .btn:active { transform: scale(0.98); }
+  .btn.danger { background: linear-gradient(135deg, #ef4444, #b91c1c); }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="topbar">
+  <div id="topMain">
+    <div class="stat wave"><span class="lab">Wave</span><span class="num" id="tbWave">1</span></div>
+    <div class="stat"><span class="lab">Time</span><span class="num" id="tbTime">0s</span></div>
+    <div class="stat coins"><span class="lab">Coins</span><span class="num" id="tbCoins">0</span></div>
+    <div class="stat hp"><span class="lab">Health</span><span class="num" id="tbHp">100</span></div>
+    <div class="stat enemies"><span class="lab">Enemies</span><span class="num" id="tbEnemies">0</span></div>
+    <div id="uiButtons"><button class="uiBtn2" id="pauseBtn" title="Pause">⏸</button><button class="uiBtn2" id="soundBtn" title="Sound">🔊</button></div>
+  </div>
+  <div id="dashStats">
+    <span class="s"><span class="label">P.DPS</span> <span class="value" id="dashDPS">0.0</span></span>
+    <span class="s"><span class="label">Acc</span> <span class="value" id="dashAcc">0%</span></span>
+    <span class="s"><span class="label">Auto</span> <span class="value" id="dashAutoDPS">0.0</span></span>
+    <span class="s"><span class="label">Regen</span> <span class="value" id="dashRegen">0.0/s</span></span>
+    <span class="s"><span class="label">EffDmg</span> <span class="value" id="dashEffDmg">0</span></span>
+    <span class="s"><span class="label">WaveHP</span> <span class="value" id="dashWaveHP">0</span></span>
+    <span class="s"><span class="label">WaveLen</span> <span class="value" id="dashWaveLen">0s</span></span>
+    <span class="s"><span class="label">Act.R</span> <span class="value" id="dashActualRatio">0.00</span></span>
+    <span class="s"><span class="label">Tgt.R</span> <span class="value" id="dashTargetRatio">1.20</span></span>
+  </div>
+</div>
+<div id="stick"><div class="mid"></div><div id="knob"></div></div>
+<div class="overlay show" id="startScreen"><div class="panel"><h1>🏰 Tower Defender 3D</h1><div class="sub">Drag anywhere along the bottom to sweep your turret left & right.<br>Enemies advance from the distance — hold the line.</div><button class="btn" id="startBtn">START</button></div></div>
+<div class="overlay" id="pauseScreen"><div class="panel"><h1>⏸ PAUSED</h1><div class="sub">Game paused. Resume when ready.</div><button class="btn" id="resumeBtn">RESUME</button></div></div>
+<div class="overlay" id="waveSummaryScreen"><div class="panel"><h1>📊 Wave <span id="sumWaveNum">1</span> Complete</h1><div style="text-align:center;font-size:16px;font-weight:700;margin-bottom:14px;padding:10px;background:rgba(20,30,50,0.6);border-radius:8px"><div style="color:#6ee08a;margin-bottom:4px">❤ <span id="sumHealth">100</span>/<span id="sumMaxHealth">100</span> HP</div><div style="color:#ffed4e">🪙 <span id="sumCoins">0</span> Coins</div></div><div style="font-family:'Courier New',monospace;font-size:12px;line-height:1.9;color:#c0d0e8;margin-bottom:16px"><div style="background:rgba(20,30,50,0.5);padding:12px;border-radius:8px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 14px"><div>Wave Length:</div><div style="color:#7fffb0;text-align:right" id="sumWaveLen">33s</div><div>Player DPS:</div><div style="color:#7fffb0;text-align:right" id="sumDPS">0.0</div><div>Player Accuracy:</div><div style="color:#7fffb0;text-align:right" id="sumAcc">0%</div><div>Auto DPS:</div><div style="color:#7fffb0;text-align:right" id="sumAutoDPS">0.0</div><div>Regen/sec:</div><div style="color:#7fffb0;text-align:right" id="sumRegen">0.0</div><div>Effective Damage:</div><div style="color:#7fffb0;text-align:right" id="sumEffective">0</div><div>Wave HP:</div><div style="color:#ff7a6a;text-align:right" id="sumEnemyHP">0</div><div style="border-top:1px solid rgba(120,160,220,0.25);padding-top:4px;margin-top:4px">Actual Ratio:</div><div style="color:#ffed4e;text-align:right;border-top:1px solid rgba(120,160,220,0.25);padding-top:4px;margin-top:4px" id="sumActualRatio">0.00</div><div>Target Ratio:</div><div style="color:#ff9a6b;text-align:right" id="sumTargetRatio">1.20</div></div></div></div><button class="btn" id="continueBtn">CONTINUE TO SHOP</button></div></div>
+<div class="overlay" id="shopScreen"><div class="panel"><h1 id="shopTitle">Wave Cleared!</h1><div class="coins" style="margin-bottom:8px">🪙 <span id="shopCoins">0</span> &nbsp;·&nbsp; <span style="color:#6ee08a">❤ <span id="shopHp">100</span>/<span id="shopMaxHp">100</span></span></div><div class="shop-grid"><div class="shop-col"><h3>⚔️ Offense</h3><div id="offenseUpgrades"></div></div><div class="shop-col"><h3>🛡️ Defense</h3><div id="defenseUpgrades"></div></div></div><div style="margin-top:8px;padding:9px 11px;background:rgba(20,30,50,0.6);border-radius:8px;font-family:'Courier New',monospace;font-size:10.5px;color:#aabbdd"><div style="color:#8aa0c8;margin-bottom:5px;font-weight:700">🔮 Wave <span id="shopNextWaveNum">2</span> Projection</div><div style="display:grid;grid-template-columns:1fr auto 1fr auto;gap:2px 10px"><div>Wave Len:</div><div style="color:#7fffb0;text-align:right" id="shopNWLen">33s</div><div>Player DPS:</div><div style="color:#7fffb0;text-align:right" id="shopNWDps">0.0</div><div>Prev Acc:</div><div style="color:#7fffb0;text-align:right" id="shopNWAcc">0%</div><div>Auto DPS:</div><div style="color:#7fffb0;text-align:right" id="shopNWAuto">0.0</div><div>Regen/s:</div><div style="color:#7fffb0;text-align:right" id="shopNWRegen">0.0</div><div>Eff. Dmg:</div><div style="color:#7fffb0;text-align:right" id="shopNWEff">0</div><div>Tgt Ratio:</div><div style="color:#ff9a6b;text-align:right" id="shopNWRatio">1.20</div><div>Enemies:</div><div style="color:#ffed4e;text-align:right;font-weight:700" id="shopNWEnemyCount">0</div><div style="font-weight:700;color:#ffed4e">→ Enemy HP:</div><div style="color:#ffed4e;text-align:right;font-weight:700" id="shopNWHP">0</div></div></div><button class="btn" id="nextWaveBtn">START WAVE</button></div></div>
+<div class="overlay" id="gameOverScreen"><div class="panel"><h1>💀 Tower Destroyed</h1><div class="sub" id="gameOverSub">You held out for a while.</div><div class="coins">Best Wave: <span id="bestWave">0</span></div><button class="btn danger" id="restartBtn">TRY AGAIN</button></div></div>
+
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js", "three/addons/": "./vendor/addons/" } }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const HALF_W = 15, SPAWN_Z = -70, WALL_Z = 0, MAX_YAW = Math.PI / 2, BULLET_SPEED = 46, AUTO_BULLET_SPEED = 42;
+const TOWER_DMG_SCALE = 1.0; // Tower damage = enemy remaining HP (1:1)
+let soundEnabled = true;
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function playSound(freq, duration, type='sine', volume=0.04) {
+  if (!freq || !soundEnabled) return;
+  try { const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.type = type; osc.frequency.value = freq;
+    gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.005, audioCtx.currentTime + duration * 0.8);
+    osc.start(); osc.stop(audioCtx.currentTime + duration * 0.8);
+  } catch(e) {}
+}
+
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.35;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFShadowShadowMap;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000510); // deep space
+scene.fog = new THREE.Fog(0x000510, 45, 100); // fog fades in from spawn zone
+
+// Steep angled overview (more overhead, less forward) looking into the field.
+// Camera sits high & above the player side; the WALL (Z=0) lands near the BOTTOM
+// where its width stretches across the screen, and the spawn zone (Z=-52) recedes
+// to the top (higher horizon, narrower from perspective). Tuned so the wall fills
+// the portrait width with a small cushion while the whole battlefield stays in frame.
+const camera = new THREE.PerspectiveCamera(74, 1, 0.1, 220);
+camera.position.set(0, 52, 9); // MUCH closer zoom (50% from original)
+camera.lookAt(0, 2, -32);
+
+let composer, bloom;
+function buildComposer(w, h) {
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 1.4, 0.95, 0.8);
+  composer.addPass(bloom);
+  composer.addPass(new OutputPass());
+}
+
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+  if (!composer) buildComposer(w, h);
+  else composer.setSize(w, h);
+}
+window.addEventListener('resize', resize);
+
+// Lighting - much brighter
+scene.add(new THREE.HemisphereLight(0x8fb9ff, 0x2a4060, 1.2));
+const keyLight = new THREE.DirectionalLight(0xfff8e8, 1.8);
+keyLight.position.set(-20, 32, 14);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.width = keyLight.shadow.mapSize.height = 2048;
+keyLight.shadow.camera.far = 140;
+keyLight.shadow.camera.left = -50; keyLight.shadow.camera.right = 50;
+keyLight.shadow.camera.top = 70; keyLight.shadow.camera.bottom = -15;
+scene.add(keyLight);
+const fillLight = new THREE.DirectionalLight(0x6cb5ff, 1.0);
+fillLight.position.set(25, 18, -22);
+scene.add(fillLight);
+const backLight = new THREE.DirectionalLight(0xff9a5a, 0.6);
+backLight.position.set(0, 12, 40);
+scene.add(backLight);
+
+// Textures
+function makeGroundTexture(w, h) {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#0f1a28'; ctx.fillRect(0, 0, w, h);
+
+  // Base stone/concrete pattern
+  const tileSize = 32;
+  for (let ty = 0; ty < h; ty += tileSize) {
+    for (let tx = 0; tx < w; tx += tileSize) {
+      const c = Math.floor(Math.random() * 25 + 20);
+      ctx.fillStyle = `rgb(${c+5},${c+8},${c+12})`;
+      ctx.fillRect(tx, ty, tileSize, tileSize);
+      ctx.strokeStyle = `rgba(0,0,0,0.3)`;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(tx, ty, tileSize, tileSize);
+    }
+  }
+
+  // Cracks and details
+  for (let i = 0; i < 400; i++) {
+    const x = Math.random() * w, y = Math.random() * h;
+    const len = Math.random() * 30 + 10;
+    ctx.strokeStyle = `rgba(0,0,0,${Math.random()*0.4+0.1})`;
+    ctx.lineWidth = Math.random() * 2 + 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.random() * len - len/2, y + Math.random() * len - len/2);
+    ctx.stroke();
+  }
+
+  // Dirt/grime spots
+  for (let i = 0; i < 800; i++) {
+    const x = Math.random() * w, y = Math.random() * h;
+    const size = Math.random() * 6 + 1;
+    const intensity = Math.random() * 0.5 + 0.2;
+    ctx.fillStyle = `rgba(0,0,0,${intensity})`;
+    ctx.fillRect(x, y, size, size);
+  }
+
+  // Small pebbles/texture
+  for (let i = 0; i < 1200; i++) {
+    const x = Math.random() * w, y = Math.random() * h;
+    const shade = Math.floor(Math.random() * 40 + 10);
+    ctx.fillStyle = `rgba(${shade},${shade+5},${shade+10},${Math.random()*0.4+0.3})`;
+    ctx.fillRect(x, y, Math.random() * 3 + 0.5, Math.random() * 3 + 0.5);
+  }
+
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.magFilter = THREE.NearestFilter; return t;
+}
+function makeBrickTexture(w, h) {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#5a6a8a'; ctx.fillRect(0, 0, w, h);
+  const bW = w/10, bH = h/8;
+  ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 2;
+  for (let y = 0; y < h; y += bH) {
+    const off = ((y / bH) % 2) * bW / 2;
+    for (let x = off; x < w; x += bW) {
+      ctx.strokeRect(x, y, bW - 1, bH - 1);
+      ctx.fillStyle = 'rgba(255,255,255,0.15)';
+      ctx.fillRect(x + 2, y + 2, bW - 5, 2);
+    }
+  }
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+
+// Battlefield platform — only cover the playable area (between the cyan rails).
+// Everything outside fades to space background. Platform floats in space.
+const PLAT_W = 36, PLAT_L = 85, PLAT_H = 3.4, PLAT_CZ = -27;
+const groundMat = new THREE.MeshStandardMaterial({ map: makeGroundTexture(256, 256), roughness: 0.85, metalness: 0.08 });
+groundMat.map.repeat.set(5, 9); groundMat.map.wrapS = groundMat.map.wrapT = THREE.RepeatWrapping;
+const edgeMat = new THREE.MeshStandardMaterial({ color: 0x0a1422, roughness: 0.92, metalness: 0.4, emissive: 0x08101e, emissiveIntensity: 0.5 });
+const platMats = [edgeMat, edgeMat, groundMat, edgeMat, edgeMat, edgeMat];
+const ground = new THREE.Mesh(new THREE.BoxGeometry(PLAT_W, PLAT_H, PLAT_L), platMats);
+ground.position.set(0, -PLAT_H/2, PLAT_CZ); ground.receiveShadow = true; ground.castShadow = true;
+scene.add(ground);
+
+// Glowing trim along the top edges (less prominent to let background show)
+const trimMat = new THREE.MeshBasicMaterial({ color: 0x1a3a5a, fog: false });
+for (const sx of [-1, 1]) {
+  const trim = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, PLAT_L), trimMat);
+  trim.position.set(sx * (PLAT_W/2 - 0.2), 0, PLAT_CZ); scene.add(trim);
+}
+
+const railMat = new THREE.MeshBasicMaterial({ color: 0x3effff });
+for (const sx of [-1, 1]) {
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.8, PLAT_L), railMat);
+  rail.position.set(sx * (PLAT_W/2), 0.4, PLAT_CZ); scene.add(rail);
+}
+
+// Starfield with subtle twinkling. Twinkle driven by shader based on position and time.
+const starLayers = [];
+(() => {
+  function makeStarLayer(n, color, size, opacity) {
+    const pos = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      let x, y, z;
+      do {
+        x = (Math.random() - 0.5) * 340;               // left ↔ right
+        y = 6 + Math.random() * 130;                   // low horizon → top of sky
+        z = -135 + Math.random() * 150;                // far field → near camera
+      } while (Math.abs(x) < 26 && z > -68 && z < 6 && y < 55);
+      pos[i*3] = x; pos[i*3+1] = y; pos[i*3+2] = z;
+    }
+    const geo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.ShaderMaterial({
+      transparent: true, fog: false,
+      uniforms: { uColor: { value: new THREE.Color(color) }, uBaseOp: { value: opacity }, uTime: { value: 0 } },
+      vertexShader: `varying vec3 vPos; void main(){ vPos = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); gl_PointSize = ${size}; }`,
+      fragmentShader: `uniform vec3 uColor; uniform float uBaseOp; uniform float uTime; varying vec3 vPos;
+        void main(){
+          float t1 = sin(uTime * 0.8 + vPos.x*0.05)*0.5+0.5;
+          float t2 = sin(uTime * 1.3 + vPos.y*0.03 + vPos.z*0.02)*0.5+0.5;
+          float t = mix(t1, t2, 0.5);
+          gl_FragColor = vec4(uColor, uBaseOp * (0.6 + t*0.4));
+        }`
+    });
+    const pts = new THREE.Points(geo, mat);
+    pts.frustumCulled = false;
+    scene.add(pts);
+    starLayers.push(mat);
+  }
+  makeStarLayer(500, 0xccb0ff, 0.9, 0.6);   // far/dim
+  makeStarLayer(650, 0xeae0ff, 1.5, 0.85);  // mid
+  makeStarLayer(350, 0xffffff, 2.4, 1.0);   // near/bright
+})();
+
+// Wall with enhanced detail
+const wallGrp = new THREE.Group();
+const stoneMat = new THREE.MeshStandardMaterial({
+  map: makeBrickTexture(256, 128),
+  roughness: 0.78,
+  metalness: 0.22,
+});
+stoneMat.map.repeat.set(6, 3.5); stoneMat.map.wrapS = stoneMat.map.wrapT = THREE.RepeatWrapping;
+const wallBody = new THREE.Mesh(new THREE.BoxGeometry(38, 3.2, 2.0), stoneMat);
+wallBody.position.set(0, 1.6, 0.9); wallBody.castShadow = true; wallBody.receiveShadow = true;
+wallGrp.add(wallBody);
+for (let x = -18; x <= 18; x += 3.2) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.4, 2.0), stoneMat);
+  m.position.set(x, 3.3, 0.9); m.castShadow = true; m.receiveShadow = true;
+  wallGrp.add(m);
+}
+const hpBarBg = new THREE.Mesh(new THREE.BoxGeometry(36, 0.5, 0.12), new THREE.MeshBasicMaterial({ color: 0x10131f }));
+hpBarBg.position.set(0, 2.95, -0.35);
+wallGrp.add(hpBarBg);
+const hpBar = new THREE.Mesh(new THREE.BoxGeometry(35, 0.4, 0.16), new THREE.MeshBasicMaterial({ color: 0x5be08a, transparent: true, opacity: 0.95 }));
+hpBar.position.set(-17.5, 2.95, -0.4);
+wallGrp.add(hpBar);
+scene.add(wallGrp);
+
+// Turret (professional design with visible back half)
+function buildTurret(scale, isAuto) {
+  const g = new THREE.Group();
+  const metalMat = new THREE.MeshStandardMaterial({ color: isAuto ? 0x5a7a9a : 0x9abacc, roughness: 0.25, metalness: 0.88, emissive: isAuto ? 0x1a3a5a : 0x2a3a4a, emissiveIntensity: 0.3 });
+  const goldMat = new THREE.MeshStandardMaterial({ color: isAuto ? 0xa0c8ff : 0xf0d84a, roughness: 0.15, metalness: 0.95, emissive: isAuto ? 0x4a6a9a : 0x7a6a2a, emissiveIntensity: 0.8 });
+  const backMat = new THREE.MeshStandardMaterial({ color: isAuto ? 0xff8a5a : 0x6a8aaa, roughness: 0.35, metalness: 0.65, emissive: isAuto ? 0x8a3a2a : 0x3a4a5a, emissiveIntensity: 0.25 });
+
+  // Front + back base
+  const baseF = new THREE.Mesh(new THREE.CylinderGeometry(2.0*scale, 2.2*scale, 0.8*scale, 16), metalMat);
+  baseF.position.set(0, 0.45*scale, -0.6*scale); baseF.castShadow = true;
+  g.add(baseF);
+  const baseB = new THREE.Mesh(new THREE.CylinderGeometry(1.8*scale, 2.0*scale, 0.8*scale, 16), metalMat);
+  baseB.position.set(0, 0.45*scale, 0.6*scale); baseB.castShadow = true;
+  g.add(baseB);
+
+  // Front housing
+  const houseF = new THREE.Mesh(new THREE.BoxGeometry(2.3*scale, 1.6*scale, 2.3*scale), metalMat);
+  houseF.position.set(0, 0.85*scale, -1.2*scale); houseF.castShadow = true;
+  g.add(houseF);
+
+  // Back housing (more prominent for auto-turrets - visible above wall)
+  const backScale = isAuto ? 1.4 : 1.0;
+  const houseB = new THREE.Mesh(new THREE.BoxGeometry(2.0*scale*backScale, 1.5*scale*backScale, 1.8*scale*backScale), backMat);
+  houseB.position.set(0, 0.8*scale*backScale, 1.3*scale); houseB.castShadow = true;
+  g.add(houseB);
+
+  // Yaw group (front barrel)
+  const yawGrp = new THREE.Group();
+  yawGrp.position.set(0, 1.85*scale, -1.2*scale);
+
+  const barrelBase = new THREE.Mesh(new THREE.CylinderGeometry(0.45*scale, 0.5*scale, 0.5*scale, 14), goldMat);
+  barrelBase.rotation.x = -Math.PI / 2;
+  barrelBase.castShadow = true;
+  yawGrp.add(barrelBase);
+
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.28*scale, 0.32*scale, 3.5*scale, 14), goldMat);
+  barrel.rotation.x = -Math.PI / 2;
+  barrel.position.z = -1.8*scale;
+  barrel.castShadow = true;
+  yawGrp.add(barrel);
+
+  const barrelTip = new THREE.Mesh(new THREE.ConeGeometry(0.30*scale, 0.6*scale, 14), goldMat);
+  barrelTip.rotation.x = -Math.PI / 2;
+  barrelTip.position.z = -3.8*scale;
+  barrelTip.castShadow = true;
+  yawGrp.add(barrelTip);
+
+  const muzzle = new THREE.Object3D();
+  muzzle.position.z = -4.1*scale;
+  yawGrp.add(muzzle);
+
+  g.add(yawGrp);
+
+  // Glowing cores (front and back) - different colors for auto turrets
+  const coreMat = new THREE.MeshBasicMaterial({ color: isAuto ? 0x5ac8ff : 0xfff0a0 });
+  const coreF = new THREE.Mesh(new THREE.SphereGeometry(0.55*scale, 16, 16), coreMat);
+  coreF.position.set(0, 1.85*scale, -1.2*scale);
+  g.add(coreF);
+
+  const backCoreMat = new THREE.MeshBasicMaterial({ color: isAuto ? 0xff7a4a : 0xcaa060 });
+  const coreB = new THREE.Mesh(new THREE.SphereGeometry(0.5*scale, 14, 14), backCoreMat);
+  coreB.position.set(0, 1.0*scale, 1.3*scale);
+  g.add(coreB);
+
+  return { group: g, yawGrp, muzzle, coreF, coreB, metalMat, goldMat };
+}
+
+const mainTurret = buildTurret(1.1, false);
+mainTurret.group.position.set(0, 0, WALL_Z);
+scene.add(mainTurret.group);
+
+// Aim sight: a tight cone that starts as a point at the muzzle and spreads
+// down the battlefield, fading toward the far end, with a crisp center line.
+const AIM_LEN = 60;
+const aimGroup = new THREE.Group();
+scene.add(aimGroup);
+
+// Open cone, apex at origin spreading toward -Z (forward). Baked rotation so the
+// local position length goes 0 (apex/muzzle) → AIM_LEN (far end) for the fade.
+const aimConeGeo = new THREE.ConeGeometry(5, AIM_LEN, 22, 1, true);
+aimConeGeo.translate(0, -AIM_LEN / 2, 0); // apex to origin, base at -AIM_LEN on Y
+aimConeGeo.rotateX(Math.PI / 2);          // apex at origin, base toward -Z
+const aimConeMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false,
+  uniforms: { uMax: { value: AIM_LEN } },
+  vertexShader: `varying float vDist; void main(){ vDist = length(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+  fragmentShader: `varying float vDist; uniform float uMax; void main(){ float a = (1.0 - vDist/uMax); a = clamp(a,0.0,1.0); gl_FragColor = vec4(0.85,0.78,0.45, a*a*a*0.05); }`
+});
+const aimCone = new THREE.Mesh(aimConeGeo, aimConeMat);
+aimCone.frustumCulled = false;
+aimGroup.add(aimCone);
+
+// Center sight line straight down the middle of the cone
+const aimLineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,-AIM_LEN)]);
+const aimLineMat = new THREE.LineBasicMaterial({ color: 0xbdb060, transparent: true, opacity: 0.16, fog: false });
+const aimLine = new THREE.Line(aimLineGeo, aimLineMat);
+aimLine.frustumCulled = false;
+aimGroup.add(aimLine);
+
+const game = {
+  coins: 0, wave: 0, bestWave: 0,
+  maxHp: 100, hp: 100, hpRegen: 0,
+  fireRate: 2.0, damage: 8, pierce: 0,
+  autoTurrets: [], autoDamage: 5, autoFireRate: 1.0,
+  lv: { fireRate:0, damage:0, autoTurret:0, autoPower:0, maxHp:0, regen:0, pierce:0 },
+  diff: 0.9,
+  waveDuration: 35,
+  waveTimer: 0,
+};
+const State = { START:0, PLAYING:1, SHOP:2, GAMEOVER:3, PAUSE:4, WAVE_SUMMARY:5 };
+let state = State.START, prevState = State.START;
+let yaw = 0, playerCooldown = 0, toSpawn = 0, spawnTimer = 0, spawnInterval = 0.85;
+let waveStartHp = 100, waveClosestGap = Infinity, shakeT = 0;
+let spawnQueue = [], spawnIndex = 0;
+let clock = new THREE.Clock();
+const enemies = [];
+let mainBulletsFired = 0, mainBulletsHit = 0;
+let waveEnemyHP = 0;
+let lastDiffMultiplier = 1, lastPerformanceRatio = 1, lastCoinsEarned = 0;
+let expectedNextWaveHP = 0, expectedNextDPS = 0;
+let lastWaveAccuracy = 0.5; // Wave 1 uses 50% assumed accuracy
+let difficultyRatioTarget = 1.2;
+let nextWaveHPProjection = 0; // Calculated after shopping
+
+// Bullet pool
+const bulletGeo = new THREE.SphereGeometry(0.4, 12, 12);
+const bulletMatP = new THREE.MeshBasicMaterial({ color: 0xffe24a });
+const bulletMatA = new THREE.MeshBasicMaterial({ color: 0x7dff9e });
+const bulletPool = [];
+for (let i = 0; i < 200; i++) {
+  const mesh = new THREE.Mesh(bulletGeo, bulletMatP);
+  mesh.visible = false; mesh.castShadow = true;
+  scene.add(mesh);
+  bulletPool.push({ mesh, active: false, vx: 0, vz: 0, dmg: 0, life: 0, pierce: 0, pierceLevel: 0, hitEnemies: new Set(), isMain: false });
+}
+function spawnBullet(x, y, z, dx, dz, speed, dmg, isPlayer) {
+  for (const b of bulletPool) {
+    if (b.active) continue;
+    b.active = true; b.dmg = dmg; b.life = 2.4; b.pierce = game.pierce; b.pierceLevel = game.pierce; b.isMain = isPlayer;
+    b.vx = dx * speed; b.vz = dz * speed;
+    b.hitEnemies.clear();
+    b.mesh.material = isPlayer ? bulletMatP : bulletMatA;
+    b.mesh.position.set(x, y, z); b.mesh.visible = true;
+    if (isPlayer) mainBulletsFired++;
+    return;
+  }
+}
+
+// Particle pool
+const sparkPool = [];
+for (let i = 0; i < 320; i++) {
+  const g = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1 }));
+  g.visible = false;
+  scene.add(g);
+  sparkPool.push({ m: g, active: false, vx:0, vy:0, vz:0, life:0, maxLife:0 });
+}
+function burst(x, y, z, color, n, spread, lifeBase) {
+  let count = 0;
+  for (const p of sparkPool) {
+    if (p.active) continue;
+    p.active = true;
+    p.maxLife = p.life = lifeBase + Math.random() * 0.35;
+    const a = Math.random() * Math.PI * 2, el = (Math.random() - 0.3) * Math.PI;
+    const sp = spread * (0.6 + Math.random() * 0.4);
+    p.vx = Math.cos(a) * Math.cos(el) * sp; p.vy = Math.abs(Math.sin(el)) * sp + 2.5; p.vz = Math.sin(a) * Math.cos(el) * sp;
+    p.m.material.color.set(color);
+    p.m.position.set(x, y, z); p.m.visible = true;
+    if (++count >= n) break;
+  }
+}
+
+const floaters = [];
+function addFloater(x, y, z, text, color) {
+  const cv = document.createElement('canvas'); cv.width = 128; cv.height = 64;
+  const ctx = cv.getContext('2d');
+  ctx.font = 'bold 44px system-ui, Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillText(text, 66, 34);
+  ctx.fillStyle = color; ctx.fillText(text, 64, 32);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false }));
+  sp.scale.set(4.5, 2.2, 1); sp.position.set(x, y, z); scene.add(sp);
+  floaters.push({ sp, life: 1.2 });
+}
+
+// Enemies — size, shape, color & speed all derived from HP
+function spawnEnemy() {
+  // Pull this enemy's HP from the precomputed wave composition
+  let hp = spawnQueue[spawnIndex] != null ? spawnQueue[spawnIndex] : 8;
+  spawnIndex++;
+  hp = Math.max(8, hp);
+
+  // Coins earned per wave are fixed; distribute evenly across enemies
+  const baseRewardPerWave = ECONOMY.baseWaveCoins + game.wave * ECONOMY.coinPerWave;
+  const reward = Math.round(baseRewardPerWave / Math.max(1, spawnQueue.length));
+
+  // Size proportional to HP: MUCH bigger for visibility
+  const r = Math.max(1.2, Math.min(4.2, 1.0 * Math.cbrt(hp)));
+
+  // Speed: smaller enemies are faster; speeds increase significantly each wave
+  const baseSpeed = 5.0 + game.wave * 0.45;
+  const speedVariation = 0.85 + Math.random() * 0.3; // ±15% random speed variation
+  const speed = baseSpeed * (1.9 / (r + 0.7)) * speedVariation;
+
+  // Shape & color tier based on HP (more naturalistic, less neon)
+  const tier = hp < 30 ? 0 : hp < 70 ? 1 : hp < 110 ? 2 : hp < 160 ? 3 : hp < 220 ? 4 : 5;
+  const color =    [0x2a9a7a, 0x3a7ec8, 0x6a4ab8, 0xc87020, 0xc81818, 0xd81878][tier];
+  const eyeColor = [0x7fffb0, 0x7fd8ff, 0xb89aff, 0xffb860, 0xff8a5a, 0xff8aaa][tier];
+
+  const g = new THREE.Group();
+  const x = (Math.random() * 2 - 1) * (HALF_W - 2);
+  g.position.set(x, 0, SPAWN_Z);
+
+  // Geometry tier: increasing face count as size grows
+  let geo;
+  switch (tier) {
+    case 0: geo = new THREE.TetrahedronGeometry(r, 0); break;        // 4 faces
+    case 1: geo = new THREE.BoxGeometry(r*1.4, r*1.4, r*1.4); break; // 6 faces
+    case 2: geo = new THREE.OctahedronGeometry(r, 0); break;         // 8 faces
+    case 3: geo = new THREE.DodecahedronGeometry(r, 0); break;       // 12 faces
+    case 4: geo = new THREE.IcosahedronGeometry(r, 1); break;        // 20 faces
+    default: geo = new THREE.IcosahedronGeometry(r, 2); break;       // 80+ faces (super-enemy)
+  }
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.5 + Math.random() * 0.2, metalness: 0.4, emissive: eyeColor, emissiveIntensity: 0.3 + tier * 0.05 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.y = r;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  g.add(mesh);
+
+  const eyeMat = new THREE.MeshBasicMaterial({ color: eyeColor });
+  const eye = new THREE.Mesh(new THREE.SphereGeometry(r*0.32, 12, 12), eyeMat);
+  eye.position.set(0, r + 0.3, r * 0.85);
+  g.add(eye);
+
+  const shadowGeo = new THREE.CircleGeometry(r*2.0, 18);
+  const shadowMesh = new THREE.Mesh(shadowGeo, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.5, depthWrite: false }));
+  shadowMesh.rotation.x = -Math.PI / 2; shadowMesh.position.set(0, 0.02, 0);
+  g.add(shadowMesh);
+
+  const barBg = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x10131f, depthWrite: false }));
+  barBg.scale.set(r * 2.6, 0.35, 1); barBg.position.set(0, r * 2.5, 0); barBg.visible = false; g.add(barBg);
+  const barFill = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x6ee08a, depthWrite: false }));
+  barFill.center.set(0, 0.5); barFill.scale.set(r * 2.5, 0.28, 1);
+  barFill.position.set(-r * 1.25, r * 2.5, 0.01); barFill.visible = false; g.add(barFill);
+
+  scene.add(g);
+  enemies.push({ g, mesh, mat, baseEI: 0.6, x, z: SPAWN_Z, hp, maxHp: hp, speed, r, reward, color, eyeColor,
+    hitFlash: 0, bob: Math.random() * Math.PI * 2, barBg, barFill, barW: r * 2.5 });
+}
+
+function removeEnemy(idx) {
+  const e = enemies[idx];
+  scene.remove(e.g);
+  e.mesh.geometry.dispose();
+  e.mesh.material.dispose();
+  enemies.splice(idx, 1);
+}
+
+function aimDir(theta) { return { dx: Math.sin(theta), dz: -Math.cos(theta) }; }
+
+function fireMain() {
+  const { dx, dz } = aimDir(yaw);
+  const m = new THREE.Vector3(); mainTurret.muzzle.getWorldPosition(m);
+  spawnBullet(m.x, m.y, m.z, dx, dz, BULLET_SPEED, game.damage, true);
+  burst(m.x, m.y, m.z, 0xffe24a, 7, 8, 0.22);
+  playSound(280, 0.05, 'sine', 0.035);
+}
+
+function fireAuto(t) {
+  let best = null, bestD = Infinity;
+  for (const e of enemies) {
+    const d = (e.x - t.x) ** 2 + (e.z - t.z) ** 2;
+    if (d < bestD) { bestD = d; best = e; }
+  }
+  if (!best) return false;
+  const leadZ = best.z + best.speed * t.leadTime;
+  const dx = best.x - t.x, dz = leadZ - t.z;
+  const len = Math.hypot(dx, dz) || 1;
+  const m = new THREE.Vector3(); t.muzzle.getWorldPosition(m);
+  spawnBullet(m.x, m.y, m.z, dx/len, dz/len, AUTO_BULLET_SPEED, game.autoDamage, false);
+  return true;
+}
+
+function getTargetDifficultyRatio(wave) {
+  // Difficulty ratio: 1.2 at wave 1, linearly falling to 0.95 by wave 10, then constant
+  if (wave >= 10) return 0.95;
+  return 1.2 - ((wave - 1) * 0.25 / 9);
+}
+
+function calculateWaveDurationExact(queue, wave) {
+  // Calculate EXACT wave duration from actual queue composition
+  // Wave duration = max(spawn_time_of_enemy + travel_time_of_enemy) across all enemies
+  if (queue.length === 0) return 0;
+
+  const spawnInterval = Math.max(0.3, 0.9 - wave * 0.02);
+  const baseSpeed = 5.0 + wave * 0.45;
+
+  let maxCompletionTime = 0;
+
+  for (let i = 0; i < queue.length; i++) {
+    const enemyHP = queue[i];
+    const radius = Math.max(1.2, Math.min(4.2, 1.0 * Math.cbrt(enemyHP)));
+    const enemySpeed = baseSpeed * (1.9 / (radius + 0.7));
+
+    const spawnTime = i * spawnInterval;
+    const travelDistance = Math.abs(WALL_Z - SPAWN_Z);
+    const travelTime = travelDistance / enemySpeed;
+    const completionTime = spawnTime + travelTime;
+
+    maxCompletionTime = Math.max(maxCompletionTime, completionTime);
+  }
+
+  return Math.round(maxCompletionTime);
+}
+
+function startWave() {
+  game.wave++;
+  game.bestWave = Math.max(game.bestWave, game.wave);
+
+  const playerMainDPS = getPlayerMainDPS(game.damage, game.fireRate, game.pierce);
+  const playerAutoDPS = game.autoTurrets.length * game.autoDamage * game.autoFireRate;
+
+  // Target difficulty ratio for this wave (1.2 → 0.8 by wave 10)
+  const targetRatio = getTargetDifficultyRatio(game.wave);
+  difficultyRatioTarget = targetRatio;
+
+  // Wave 1: accuracy = 50%; Wave 2+: previous wave's accuracy
+  const accuracyForCalc = game.wave === 1 ? 0.5 : lastWaveAccuracy;
+
+  // Regen contributes (regen/sec × waveHP / 100) to effective damage, so solving
+  //   waveHP = [duration×(playerDPS×acc + autoDPS) + regen×waveHP/100] / targetRatio
+  // gives waveHP = baseDamage / (targetRatio − regen/100). Clamp denominator > 0.
+  const regenDenom = Math.max(0.1, targetRatio - (5 * game.hpRegen / 100));
+
+  // Step 1: Use previous wave's duration as baseline to estimate waveHP
+  // (For wave 1, assume ~25 second baseline)
+  const baselineDuration = game.wave === 1 ? 25 : game.waveDuration;
+  const playerMainDPSWithAcc = getPlayerMainDPSWithAccuracy(game.damage, game.fireRate, game.pierce, accuracyForCalc);
+  const baselineBaseDamage = baselineDuration * (playerMainDPSWithAcc + playerAutoDPS);
+  let waveHP = Math.round(baselineBaseDamage / regenDenom);
+
+  // Step 2: Build the actual wave composition
+  spawnQueue = buildWaveComposition(waveHP, game.wave);
+  spawnIndex = 0;
+  toSpawn = spawnQueue.length;
+
+  spawnTimer = 0;
+  spawnInterval = Math.max(0.3, 0.9 - game.wave * 0.02);
+
+  // Step 3: Calculate EXACT duration from actual queue
+  const exactDuration = calculateWaveDurationExact(spawnQueue, game.wave);
+
+  // Step 4: Recalculate waveHP with exact duration
+  const exactBaseDamage = exactDuration * (playerMainDPSWithAcc + playerAutoDPS);
+  const newWaveHP = Math.round(exactBaseDamage / regenDenom);
+
+  // Step 5: If waveHP differs significantly, rebuild queue and recalculate duration
+  if (Math.abs(newWaveHP - waveHP) > Math.max(5, waveHP * 0.15)) {
+    waveHP = newWaveHP;
+    spawnQueue = buildWaveComposition(waveHP, game.wave);
+    spawnIndex = 0;
+    toSpawn = spawnQueue.length;
+  }
+
+  // Step 6: Final duration from actual queue
+  const finalDuration = calculateWaveDurationExact(spawnQueue, game.wave);
+  game.waveDuration = finalDuration;
+  game.waveTimer = 0;
+
+  expectedNextWaveHP = waveHP;
+  expectedNextDPS = playerMainDPS;
+
+  waveStartHp = game.hp; waveClosestGap = Infinity;
+  waveEnemyHP = waveHP; // constant for the whole wave
+  mainBulletsFired = 0; mainBulletsHit = 0;
+  state = State.PLAYING; hideAll();
+}
+
+function buildWaveComposition(waveHP, wave) {
+  // Produce enemy HP chunks summing exactly to waveHP.
+  // Enemy size increases linearly with wave: avg 10 HP at wave 1, avg 200 HP at wave 10+
+  // More enemies per round means smaller total waveHP is spread across more enemies
+  const queue = [];
+
+  // Target average enemy HP based on wave (scales linearly 10 → 200)
+  const avgEnemyHP = 10 + Math.min(wave - 1, 9) * (200 - 10) / 9;
+  const minHP = Math.max(4, avgEnemyHP * 0.4);
+  const maxHP = avgEnemyHP * 1.6;
+
+  let remaining = waveHP;
+  let guard = 0;
+  while (remaining > 0 && guard++ < 200) {
+    if (remaining <= maxHP * 1.1) { queue.push(remaining); break; }
+    let chunk = minHP + Math.random() * (maxHP - minHP);
+    chunk = Math.min(chunk, remaining - minHP); // leave room for at least one more
+    queue.push(chunk);
+    remaining -= chunk;
+  }
+  // Shuffle so big and small enemies are interleaved
+  for (let i = queue.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [queue[i], queue[j]] = [queue[j], queue[i]];
+  }
+  return queue;
+}
+
+function endWave() {
+  const mainTurretDPS = game.damage * game.fireRate;
+  const autoTurretsDPS = game.autoTurrets.length * game.autoDamage * game.autoFireRate;
+  const totalDPS = mainTurretDPS + autoTurretsDPS;
+  const accuracy = mainBulletsFired > 0 ? Math.max(0, mainBulletsHit / mainBulletsFired) : 0.3;
+  const effectiveMainDPS = mainTurretDPS * accuracy;
+
+  // Store this wave's accuracy for use in next wave calculation
+  lastWaveAccuracy = accuracy;
+
+  // Calculate actual difficulty ratio achieved this wave
+  // Difficulty Ratio = (Wave Length × (Player DPS × Accuracy + Auto DPS)) / Enemy HP
+  const achievedPlayerDamage = effectiveMainDPS * game.waveDuration;
+  const achievedAutoDamage = autoTurretsDPS * game.waveDuration;
+  const achievedTotalDamage = achievedPlayerDamage + achievedAutoDamage;
+  const achievedDifficultyRatio = achievedTotalDamage / Math.max(1, waveEnemyHP);
+  lastPerformanceRatio = achievedDifficultyRatio;
+
+  // Determine difficulty multiplier based on achieved ratio vs target
+  // If achieved ratio > target, player is doing better than expected, scale up
+  let baseDiffMultiplier = 1;
+  if (achievedDifficultyRatio > difficultyRatioTarget * 1.4) baseDiffMultiplier = 1.80;       // Crushing it
+  else if (achievedDifficultyRatio > difficultyRatioTarget * 1.25) baseDiffMultiplier = 1.60;  // Dominating
+  else if (achievedDifficultyRatio > difficultyRatioTarget * 1.1) baseDiffMultiplier = 1.40;  // Very strong
+  else if (achievedDifficultyRatio > difficultyRatioTarget * 1.05) baseDiffMultiplier = 1.18;  // Strong
+  else if (achievedDifficultyRatio > difficultyRatioTarget * 0.95) baseDiffMultiplier = 1.02;  // Balanced
+  else if (achievedDifficultyRatio > difficultyRatioTarget * 0.85) baseDiffMultiplier = 0.98;  // Slightly weak
+  else if (achievedDifficultyRatio > difficultyRatioTarget * 0.7) baseDiffMultiplier = 0.85;  // Struggling
+  else if (achievedDifficultyRatio > difficultyRatioTarget * 0.5) baseDiffMultiplier = 0.72;  // Very struggling
+  else baseDiffMultiplier = 0.60;                               // Overwhelmed
+
+  // Accuracy modifier: poor accuracy gets grace period, high accuracy scales faster
+  const accuracyModifier = 0.5 + 1.5 * accuracy;  // Range: 0.5 (0% acc) to 2.0 (100% acc)
+  const adjustedMultiplier = 1 + (baseDiffMultiplier - 1) * accuracyModifier;
+  lastDiffMultiplier = adjustedMultiplier;
+
+  game.diff *= adjustedMultiplier;
+  game.diff = Math.max(0.8, Math.min(game.diff, 9));
+
+  // Coins earned based on wave (Economic loop)
+  const coinsEarned = ECONOMY.baseWaveCoins + game.wave * ECONOMY.coinPerWave;
+  game.coins += coinsEarned;
+  lastCoinsEarned = coinsEarned;
+
+  playSound(392, 0.22, 'sine', 0.06); playSound(523, 0.26, 'sine', 0.05);
+  state = State.WAVE_SUMMARY; showWaveSummary(accuracy, totalDPS);
+}
+
+function damageTower(amount) {
+  game.hp -= amount;
+  shakeT = 0.2;
+  playSound(130, 0.12, 'sine', 0.06);
+  if (game.hp <= 0) { game.hp = 0; gameOver(); }
+}
+
+function gameOver() {
+  state = State.GAMEOVER;
+  document.getElementById('bestWave').textContent = game.bestWave;
+  document.getElementById('gameOverSub').textContent = `You reached Wave ${game.wave}. The horde broke through.`;
+  show('gameOverScreen');
+  playSound(80, 0.5, 'sine', 0.1);
+}
+
+const upgrades = {
+  fireRate:   { name:'Fire Rate',     desc:'+12.5% turret fire rate', base:14, max:20, apply:()=>{ game.fireRate *= 1.125; } },
+  damage:     { name:'Turret Damage', desc:'+17.5% turret damage', base:16, max:30, apply:()=>{ game.damage *= 1.175; } },
+  pierce:     { name:'Pierce',        desc:'Bullets pierce enemies', base:26, max:5, apply:()=>{ game.pierce += 1; } },
+  autoTurret: { name:'Build Auto-Turret', desc:'Adds an auto-turret', base:38, max:4, apply:()=>{ addAutoTurret(); } },
+  autoPower:  { name:'Auto-Turret Power', desc:'+17.5% auto dmg & rate', base:24, max:25, apply:()=>{ game.autoDamage*=1.175; game.autoFireRate*=1.10; } },
+  maxHp:      { name:'Max HP',        desc:'+30 max HP', base:18, max:40, apply:()=>{ game.maxHp += 30; } },
+  regen:      { name:'HP Regen',      desc:'+0.25 HP/sec', base:28, max:20, apply:()=>{ game.hpRegen += 0.25; } },
+  repair:     { name:'Repair Tower',  desc:'Restore 40 HP', repair:true, healAmount:40 },
+};
+
+const ECONOMY = {
+  escalationRate: 0.35,
+  baseWaveCoins: 12,
+  coinPerWave: 5,
+  waveDuration: 33,
+  dpsGrowthPerWave: 1.25,
+};
+
+function getPlayerMainDPS(damage, fireRate, pierce) {
+  // Pierce scales: Lv 1 = 20%, Lv 2 = 40%, Lv 3 = 60%, etc. (20% per level)
+  // First hit full damage, subsequent at (pierce * 0.2) damage
+  if (pierce >= 1) {
+    const secondaryMultiplier = pierce * 0.2; // 20% per level
+    return fireRate * damage * (1 + secondaryMultiplier);
+  }
+  return fireRate * damage;
+}
+
+function getPlayerMainDPSWithAccuracy(damage, fireRate, pierce, accuracy) {
+  // DPS considering accuracy, but only accuracy applies to first hits.
+  // Pierce bonus damage is assumed to happen (doesn't need accuracy bonus).
+  const firstHitDPS = fireRate * damage * accuracy;
+  const secondaryMultiplier = pierce >= 1 ? pierce * 0.2 : 0;
+  const secondHitDPS = (pierce >= 1) ? (fireRate * damage * secondaryMultiplier) : 0;
+  return firstHitDPS + secondHitDPS;
+}
+
+function upgradeCost(key) {
+  const u = upgrades[key];
+  if (u.repair) return Math.round(12 * (1 + game.wave * 0.25));
+  if (key === 'autoTurret') return Math.round(u.base * Math.pow(1 + ECONOMY.escalationRate, game.autoTurrets.length));
+  return Math.round(u.base * Math.pow(1 + ECONOMY.escalationRate, game.lv[key]));
+}
+
+function calculateNextWaveHP() {
+  // Calculate EXACT specs for next wave based on current (post-shopping) stats
+  // Forecast the actual queue, timing, and resulting wave length
+  const nextWave = game.wave + 1;
+  const targetRatio = getTargetDifficultyRatio(nextWave);
+  const playerMainDPS = getPlayerMainDPS(game.damage, game.fireRate, game.pierce);
+  const playerAutoDPS = game.autoTurrets.length * game.autoDamage * game.autoFireRate;
+
+  // waveHP = baseDamage / (targetRatio − regen/100); clamp denominator > 0
+  const regenDenom = Math.max(0.1, targetRatio - (5 * game.hpRegen / 100));
+
+  // Step 1: Use current wave's duration as baseline
+  const baselineDuration = game.waveDuration;
+  const baselineBaseDamage = baselineDuration * ((playerMainDPS * lastWaveAccuracy) + playerAutoDPS);
+  let nextWaveHP = Math.round(baselineBaseDamage / regenDenom);
+
+  // Step 2: Build the actual queue for next wave
+  const tempQueue = buildWaveComposition(nextWaveHP, nextWave);
+
+  // Step 3: Calculate exact duration from that queue
+  const exactDuration = calculateWaveDurationExact(tempQueue, nextWave);
+
+  // Step 4: Recalculate waveHP with exact duration
+  const exactBaseDamage = exactDuration * ((playerMainDPS * lastWaveAccuracy) + playerAutoDPS);
+  const finalWaveHP = Math.round(exactBaseDamage / regenDenom);
+
+  // Step 5: If waveHP changed significantly, rebuild queue once more
+  let finalQueue = tempQueue;
+  if (Math.abs(finalWaveHP - nextWaveHP) > Math.max(5, nextWaveHP * 0.15)) {
+    finalQueue = buildWaveComposition(finalWaveHP, nextWave);
+  }
+
+  // Step 6: Final exact duration
+  const finalDuration = calculateWaveDurationExact(finalQueue, nextWave);
+  const finalBaseDamage = finalDuration * ((playerMainDPS * lastWaveAccuracy) + playerAutoDPS);
+  const finalRegenFactor = 5 * game.hpRegen; // 5x per-second regen contribution
+
+  return {
+    playerDPS: playerMainDPS,
+    autoDPS: playerAutoDPS,
+    regen: game.hpRegen,
+    accuracy: lastWaveAccuracy,
+    effectiveDamage: finalBaseDamage + finalRegenFactor,
+    targetRatio: targetRatio,
+    waveHP: finalWaveHP,
+    waveDuration: finalDuration,
+    enemyCount: finalQueue.length
+  };
+}
+
+function addAutoTurret() {
+  const slots = [ {x:-5.5}, {x:5.5}, {x:-11}, {x:11} ];
+  const i = game.autoTurrets.length;
+  if (i >= slots.length) return;
+  const t = buildTurret(0.75, true);
+  t.group.position.set(slots[i].x, 0, WALL_Z);
+  scene.add(t.group);
+  game.autoTurrets.push({ ...t, x: slots[i].x, z: WALL_Z, cooldown: 0, leadTime: 0.16 });
+}
+
+function update(dt) {
+  const t = clock.elapsedTime;
+  starLayers.forEach(mat => mat.uniforms.uTime.value = t);
+  mainTurret.coreF.material.color.setRGB(1, 0.94, 0.6 + 0.35 * Math.sin(t * 5));
+  mainTurret.coreB.material.color.setRGB(1, 0.94, 0.6 + 0.35 * Math.sin(t * 4.5 + 1));
+  mainTurret.yawGrp.rotation.y = -yaw;
+
+  const m = new THREE.Vector3(); mainTurret.muzzle.getWorldPosition(m);
+  aimGroup.position.copy(m);
+  aimGroup.rotation.y = -yaw;
+
+  const hpFrac = Math.max(0, game.hp / game.maxHp);
+  hpBar.scale.x = Math.max(0.001, hpFrac);
+  hpBar.position.x = -18 * (1 - hpFrac);
+  hpBar.material.color.set(hpFrac > 0.5 ? 0x5be08a : (hpFrac > 0.25 ? 0xffd24a : 0xff4a3d));
+
+  if (state === State.PLAYING) {
+    game.waveTimer += dt;
+    if (game.hpRegen > 0 && game.hp < game.maxHp) game.hp = Math.min(game.maxHp, game.hp + game.hpRegen * dt);
+    if (toSpawn > 0) { spawnTimer -= dt; if (spawnTimer <= 0) { spawnEnemy(); toSpawn--; spawnTimer = spawnInterval; } }
+    playerCooldown -= dt;
+    if (playerCooldown <= 0) { fireMain(); playerCooldown = 1 / game.fireRate; }
+    for (const at of game.autoTurrets) {
+      let best = null, bestD = Infinity;
+      for (const e of enemies) { const d = (e.x-at.x)**2 + (e.z-at.z)**2; if (d < bestD) { bestD = d; best = e; } }
+      if (best) {
+        const dx = best.x - at.x, dz = (best.z + best.speed * at.leadTime) - at.z;
+        at.yawGrp.rotation.y = -Math.atan2(dx, -dz);
+      }
+      at.coreF.material.color.setRGB(0.55, 1, 0.7 + 0.35 * Math.sin(t * 6 + at.x));
+      at.cooldown -= dt;
+      if (at.cooldown <= 0) at.cooldown = fireAuto(at) ? 1 / game.autoFireRate : 0.1;
+    }
+  }
+
+  for (const b of bulletPool) {
+    if (!b.active) continue;
+    b.life -= dt;
+    b.mesh.position.x += b.vx * dt;
+    b.mesh.position.z += b.vz * dt;
+    const bx = b.mesh.position.x, bz = b.mesh.position.z;
+    if (b.life <= 0 || bz < SPAWN_Z - 6 || bz > WALL_Z + 6 || Math.abs(bx) > HALF_W + 6) { b.active = false; b.mesh.visible = false; continue; }
+
+    for (let j = enemies.length - 1; j >= 0; j--) {
+      const e = enemies[j];
+      if (b.hitEnemies.has(j)) continue;
+      const rr = e.r + 0.4;
+      if ((bx - e.x) ** 2 + (bz - e.z) ** 2 <= rr * rr) {
+        const isFirstHit = b.hitEnemies.size === 0;
+        const dmg = isFirstHit ? b.dmg : (b.dmg * b.pierceLevel * 0.2);
+        e.hp -= dmg;
+        e.hitFlash = 0.08;
+        burst(bx, e.r, bz, e.eyeColor, 3, 4, 0.14);
+        if (b.isMain && isFirstHit) mainBulletsHit++;
+        b.hitEnemies.add(j);
+        if (e.hp <= 0) {
+          game.coins += e.reward; addFloater(e.x, e.r + 1.8, e.z, '+' + e.reward, '#ffe24a');
+          burst(e.x, e.r, e.z, e.eyeColor, 26, 12, 0.4);
+          playSound(160, 0.09, 'sine', 0.04);
+          removeEnemy(j);
+        }
+        if (b.pierce <= 0) { b.active = false; b.mesh.visible = false; break; }
+        else b.pierce--;
+      }
+    }
+  }
+
+  if (state === State.PLAYING) {
+    for (let j = enemies.length - 1; j >= 0; j--) {
+      const e = enemies[j];
+      const gap = WALL_Z - e.z;
+      if (gap < waveClosestGap) waveClosestGap = gap;
+      if (e.z < WALL_Z - 0.6) {
+        e.z += e.speed * dt;
+        e.g.position.z = e.z;
+      } else {
+        // Damage incurred = enemy remaining HP / 5
+        damageTower(Math.max(1, Math.round(e.hp / 5)));
+        burst(e.x, e.r, e.z, e.eyeColor, 18, 10, 0.4);
+        removeEnemy(j);
+      }
+    }
+    if (toSpawn === 0 && enemies.length === 0) endWave();
+  }
+
+  for (const e of enemies) {
+    e.bob += dt * 3;
+    e.mesh.position.y = e.r + Math.sin(e.bob) * 0.18;
+    e.mesh.rotation.y += dt * 1.3;
+    if (e.hitFlash > 0) { e.hitFlash -= dt; e.mat.emissiveIntensity = e.baseEI + e.hitFlash * 6; }
+    else e.mat.emissiveIntensity = e.baseEI;
+    const f = Math.max(0, e.hp / e.maxHp);
+    const dmgd = f < 0.999;
+    e.barBg.visible = e.barFill.visible = dmgd;
+    if (dmgd) {
+      e.barFill.scale.x = e.barW * f;
+      e.barFill.material.color.set(f > 0.5 ? 0x6ee08a : (f > 0.25 ? 0xffd24a : 0xff5a4a));
+    }
+  }
+
+  for (const p of sparkPool) {
+    if (!p.active) continue;
+    p.life -= dt;
+    if (p.life <= 0) { p.active = false; p.m.visible = false; continue; }
+    p.vy -= 9 * dt;
+    p.m.position.x += p.vx * dt; p.m.position.y += p.vy * dt; p.m.position.z += p.vz * dt;
+    const a = p.life / p.maxLife;
+    p.m.material.opacity = a;
+    p.m.scale.setScalar(0.18 + 0.35 * a);
+  }
+
+  for (let i = floaters.length - 1; i >= 0; i--) {
+    const f = floaters[i]; f.life -= dt; f.sp.position.y += dt * 2;
+    f.sp.material.opacity = Math.max(0, f.life);
+    if (f.life <= 0) { scene.remove(f.sp); f.sp.material.map.dispose(); f.sp.material.dispose(); floaters.splice(i, 1); }
+  }
+
+  if (shakeT > 0) {
+    shakeT -= dt;
+    const intensity = shakeT / 0.2;
+    camera.position.x = (Math.random() - 0.5) * 0.7 * intensity;
+    camera.position.y = 52 + (Math.random() - 0.5) * 0.6 * intensity;
+  } else { camera.position.x = 0; camera.position.y = 52; }
+
+  updateHUD();
+}
+
+function updateHUD() {
+  // Prominent top row: wave, time, coins, health, enemies remaining
+  document.getElementById('tbWave').textContent = game.wave;
+  document.getElementById('tbTime').textContent = (state === State.PLAYING ? Math.ceil(game.waveTimer) : 0) + 's';
+  document.getElementById('tbCoins').textContent = game.coins;
+  const tbHp = document.getElementById('tbHp');
+  tbHp.textContent = Math.ceil(game.hp) + '/' + game.maxHp;
+  tbHp.style.color = game.hp / game.maxHp > 0.25 ? '#6ee08a' : '#ff7a7a';
+  document.getElementById('tbEnemies').textContent = (enemies.length + toSpawn);
+
+  // Dashboard - Full economic stats
+  const mainDps = getPlayerMainDPS(game.damage, game.fireRate, game.pierce);
+  const autoDps = game.autoTurrets.length * game.autoDamage * game.autoFireRate;
+  const accFrac = mainBulletsFired > 0 ? mainBulletsHit / mainBulletsFired : 0;
+  const acc = Math.round(accFrac * 100);
+  // Effective Damage = Wave Length × (First hit DPS × Accuracy + Pierce bonus + Auto DPS) + Regen
+  const firstHitDPS = game.damage * game.fireRate;
+  const pierceBonus = (game.pierce >= 1) ? (game.fireRate * game.damage * 0.6) : 0;
+  const baseDmg = game.waveDuration * ((firstHitDPS * accFrac) + pierceBonus + autoDps);
+  const regenDmg = (game.hpRegen * expectedNextWaveHP) / 100;
+  const effDmg = baseDmg + regenDmg;
+  // Actual difficulty ratio = Effective Damage / Wave HP (constant wave HP)
+  const actualRatio = expectedNextWaveHP > 0 ? effDmg / expectedNextWaveHP : 0;
+
+  document.getElementById('dashWaveLen').textContent = game.waveDuration + 's';
+  document.getElementById('dashDPS').textContent = mainDps.toFixed(1);
+  document.getElementById('dashAcc').textContent = acc + '%';
+  document.getElementById('dashAutoDPS').textContent = autoDps.toFixed(1);
+  document.getElementById('dashRegen').textContent = game.hpRegen.toFixed(1) + '/s';
+  document.getElementById('dashEffDmg').textContent = effDmg.toFixed(0);
+  document.getElementById('dashWaveHP').textContent = expectedNextWaveHP.toFixed(0);
+  document.getElementById('dashActualRatio').textContent = actualRatio.toFixed(2);
+  document.getElementById('dashTargetRatio').textContent = difficultyRatioTarget.toFixed(2);
+}
+
+function showWaveSummary(accuracy, totalDps) {
+  const mainDps = getPlayerMainDPS(game.damage, game.fireRate, game.pierce);
+  const autoDps = game.autoTurrets.length * game.autoDamage * game.autoFireRate;
+
+  // Store accuracy for next wave calculation
+  lastWaveAccuracy = accuracy;
+
+  // Effective Damage = Wave Length × (First hit DPS × Accuracy + Pierce bonus + Auto DPS) + Regen
+  // Regen contribution = (game.hpRegen * waveHP) / 100
+  const firstHitDPS = game.damage * game.fireRate;
+  const pierceBonus = (game.pierce >= 1) ? (game.fireRate * game.damage * 0.6) : 0;
+  const baseDamage = game.waveDuration * ((firstHitDPS * accuracy) + pierceBonus + autoDps);
+  const regenContribution = (game.hpRegen * expectedNextWaveHP) / 100;
+  const effectiveDamage = baseDamage + regenContribution;
+  // Actual difficulty ratio = Effective Damage / Wave HP
+  const actualRatio = expectedNextWaveHP > 0 ? effectiveDamage / expectedNextWaveHP : 0;
+
+  document.getElementById('sumWaveNum').textContent = game.wave;
+  document.getElementById('sumHealth').textContent = Math.ceil(game.hp);
+  document.getElementById('sumMaxHealth').textContent = game.maxHp;
+  document.getElementById('sumCoins').textContent = game.coins;
+  document.getElementById('sumWaveLen').textContent = game.waveDuration + 's';
+  document.getElementById('sumDPS').textContent = mainDps.toFixed(1);
+  document.getElementById('sumAcc').textContent = Math.round(accuracy * 100) + '%';
+  document.getElementById('sumAutoDPS').textContent = autoDps.toFixed(1);
+  document.getElementById('sumRegen').textContent = game.hpRegen.toFixed(1);
+  document.getElementById('sumEffective').textContent = effectiveDamage.toFixed(0);
+  document.getElementById('sumEnemyHP').textContent = expectedNextWaveHP.toFixed(0);
+  document.getElementById('sumActualRatio').textContent = actualRatio.toFixed(2);
+  document.getElementById('sumTargetRatio').textContent = difficultyRatioTarget.toFixed(2);
+
+  show('waveSummaryScreen');
+}
+
+function resetGame() {
+  for (let i = enemies.length - 1; i >= 0; i--) removeEnemy(i);
+  for (const b of bulletPool) { b.active = false; b.mesh.visible = false; }
+  for (const p of sparkPool) { p.active = false; p.m.visible = false; }
+  for (const f of floaters) { scene.remove(f.sp); }
+  floaters.length = 0;
+  for (const at of game.autoTurrets) scene.remove(at.group);
+  game.autoTurrets = [];
+  game.coins = 0; game.wave = 0; game.maxHp = 100; game.hp = 100; game.hpRegen = 0;
+  game.fireRate = 2.0; game.damage = 8; game.pierce = 0; game.autoDamage = 5; game.autoFireRate = 1.0;
+  game.lv = { fireRate:0, damage:0, autoTurret:0, autoPower:0, maxHp:0, regen:0, pierce:0 };
+  game.diff = 0.9; game.waveDuration = 35; game.waveTimer = 0; yaw = 0; playerCooldown = 0;
+  mainBulletsFired = 0; mainBulletsHit = 0;
+  lastDiffMultiplier = 1; lastPerformanceRatio = 1; lastCoinsEarned = 0;
+  expectedNextWaveHP = 0; expectedNextDPS = 0;
+  lastWaveAccuracy = 0.5; difficultyRatioTarget = 1.2;
+  spawnQueue = []; spawnIndex = 0;
+}
+function startGame() { resetGame(); hideAll(); startWave(); }
+
+function loop() {
+  requestAnimationFrame(loop);
+  let dt = clock.getDelta();
+  if (dt > 0.05) dt = 0.05;
+  update(dt);
+  composer.render();
+}
+
+function hideAll(){ document.querySelectorAll('.overlay').forEach(o=>o.classList.remove('show')); }
+function show(id){ hideAll(); document.getElementById(id).classList.add('show'); }
+function showShop() {
+  document.getElementById('shopTitle').textContent = `Wave ${game.wave} Cleared!`;
+  document.getElementById('shopCoins').textContent = game.coins;
+  document.getElementById('shopHp').textContent = Math.ceil(game.hp);
+  document.getElementById('shopMaxHp').textContent = game.maxHp;
+
+  updateShopProjection();
+  renderUpgrades(); show('shopScreen');
+}
+
+function updateShopProjection() {
+  // Recalculate next wave HP after each purchase (reflects updated stats)
+  const nw = calculateNextWaveHP();
+  document.getElementById('shopNextWaveNum').textContent = game.wave + 1;
+  document.getElementById('shopNWLen').textContent = nw.waveDuration + 's';
+  document.getElementById('shopNWDps').textContent = nw.playerDPS.toFixed(1);
+  document.getElementById('shopNWAcc').textContent = Math.round(nw.accuracy * 100) + '%';
+  document.getElementById('shopNWAuto').textContent = nw.autoDPS.toFixed(1);
+  document.getElementById('shopNWRegen').textContent = nw.regen.toFixed(1);
+  document.getElementById('shopNWEff').textContent = nw.effectiveDamage.toFixed(0);
+  document.getElementById('shopNWRatio').textContent = nw.targetRatio.toFixed(2);
+  document.getElementById('shopNWHP').textContent = nw.waveHP;
+  document.getElementById('shopNWEnemyCount').textContent = nw.enemyCount;
+}
+
+function renderUpgrades() {
+  const offense = ['fireRate','damage','pierce'];
+  if (game.autoTurrets.length > 0 && game.autoTurrets.length < 4) offense.push('autoTurret','autoPower');
+  else if (game.autoTurrets.length === 0) offense.push('autoTurret');
+  else offense.push('autoPower');
+  const defense = ['maxHp','regen','repair'];
+  const offEl = document.getElementById('offenseUpgrades'), defEl = document.getElementById('defenseUpgrades');
+  offEl.innerHTML = ''; defEl.innerHTML = '';
+  const build = (key, container) => {
+    const u = upgrades[key]; const cost = upgradeCost(key);
+    const isRepair = !!u.repair, isPierce = key === 'pierce';
+    const lvl = isRepair || isPierce ? null : game.lv[key];
+    const maxed = !isRepair && !isPierce && lvl >= u.max;
+    const pierceMaxed = isPierce && game.lv.pierce >= u.max;
+    const cantAfford = game.coins < cost;
+    const repairFull = isRepair && game.hp >= game.maxHp;
+    const isBuild = key === 'autoTurret';
+    const allAutoBuilt = isBuild && game.autoTurrets.length >= 4;
+    if (key === 'autoPower' && game.autoTurrets.length === 0) return;
+    if (key === 'pierce' && game.lv.pierce >= upgrades.pierce.max) return;
+    const btn = document.createElement('button');
+    btn.className = 'up';
+    btn.disabled = (maxed || pierceMaxed) || cantAfford || repairFull || allAutoBuilt;
+    const right = (maxed || pierceMaxed) ? 'MAX' : (repairFull ? 'FULL' : (allAutoBuilt ? '✓ ALL' : '🪙'+cost));
+    let lvlLine;
+    if (isRepair) lvlLine = `<span class="lvl">${Math.ceil(game.hp)}/${game.maxHp} HP</span>`;
+    else if (isBuild) lvlLine = `<span class="lvl">${game.autoTurrets.length}/${u.max} built</span>`;
+    else if (isPierce) lvlLine = `<span class="lvl">Lv ${game.lv.pierce}${game.lv.pierce>=u.max?'':' → '+(game.lv.pierce+1)}</span>`;
+    else lvlLine = `<span class="lvl">Lv ${lvl}${maxed?'':' → '+(lvl+1)}</span>`;
+    let desc = u.desc;
+    if (isPierce) {
+      desc = `${game.lv.pierce * 20}% secondary damage`;
+    }
+    btn.innerHTML = `<span class="cost">${right}</span><span class="name">${u.name}</span>${lvlLine}<br><span style="color:#8aa0c8;font-size:11px">${desc}</span>`;
+    btn.onclick = () => {
+      const c = upgradeCost(key);
+      if (game.coins < c) return;
+      if (isRepair) { if (game.hp >= game.maxHp) return; game.coins -= c; game.hp = Math.min(game.maxHp, game.hp + u.healAmount); }
+      else { if (isBuild && game.autoTurrets.length >= 4) return; if (!isBuild && !isPierce && game.lv[key] >= u.max) return;
+        if (isPierce && game.lv.pierce >= u.max) return;
+        game.coins -= c; if (isBuild) u.apply(); else { game.lv[key]++; u.apply(); } }
+      document.getElementById('shopCoins').textContent = game.coins;
+      document.getElementById('shopHp').textContent = Math.ceil(game.hp);
+      document.getElementById('shopMaxHp').textContent = game.maxHp;
+      updateShopProjection();
+      renderUpgrades();
+    };
+    container.appendChild(btn);
+  };
+  offense.forEach(k=>build(k, offEl));
+  defense.forEach(k=>build(k, defEl));
+}
+
+document.getElementById('startBtn').onclick = () => { if (audioCtx.state === 'suspended') audioCtx.resume(); startGame(); };
+document.getElementById('restartBtn').onclick = startGame;
+document.getElementById('nextWaveBtn').onclick = startWave;
+document.getElementById('continueBtn').onclick = showShop;
+document.getElementById('pauseBtn').onclick = () => { if (state === State.PLAYING) { prevState = state; state = State.PAUSE; show('pauseScreen'); } };
+document.getElementById('resumeBtn').onclick = () => { state = prevState; hideAll(); };
+document.getElementById('soundBtn').onclick = () => { soundEnabled = !soundEnabled; document.getElementById('soundBtn').textContent = soundEnabled ? '🔊' : '🔇'; };
+
+const knob = document.getElementById('knob');
+let aiming = false, aimId = null;
+function setYawFromX(clientX) {
+  const tval = (clientX - window.innerWidth / 2) / (window.innerWidth / 2);
+  const clamped = Math.max(-1, Math.min(1, tval));
+  yaw = -clamped * MAX_YAW;
+  knob.style.left = (50 + clamped * 46) + '%';
+}
+function isUI(target) { return target.closest && target.closest('button'); }
+canvas.addEventListener('touchstart', e => {
+  if (state !== State.PLAYING || aiming || isUI(e.target)) return;
+  e.preventDefault(); const t = e.changedTouches[0]; aiming = true; aimId = t.identifier; setYawFromX(t.clientX);
+}, { passive: false });
+canvas.addEventListener('touchmove', e => {
+  if (!aiming) return; e.preventDefault();
+  for (const t of e.changedTouches) if (t.identifier === aimId) { setYawFromX(t.clientX); break; }
+}, { passive: false });
+function endTouch(e) { if (!aiming) return; for (const t of e.changedTouches) if (t.identifier === aimId) { aiming = false; aimId = null; } }
+canvas.addEventListener('touchend', endTouch);
+canvas.addEventListener('touchcancel', endTouch);
+canvas.addEventListener('mousedown', e => { if (state === State.PLAYING && !isUI(e.target)) { aiming = true; setYawFromX(e.clientX); } });
+window.addEventListener('mousemove', e => { if (aiming) setYawFromX(e.clientX); });
+window.addEventListener('mouseup', () => { aiming = false; });
+
+resize();
+updateHUD();
+loop();
+</script>
+</body>
+</html>

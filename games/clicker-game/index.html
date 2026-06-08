@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clicker Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .game-container {
+            text-align: center;
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            max-width: 400px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .score {
+            font-size: 24px;
+            color: #667eea;
+            font-weight: bold;
+            margin-bottom: 30px;
+        }
+
+        .click-button {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 32px;
+            cursor: pointer;
+            transition: all 0.1s;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            margin: 0 auto 30px;
+            display: block;
+            font-weight: bold;
+        }
+
+        .click-button:active {
+            transform: scale(0.95);
+        }
+
+        .click-button:hover {
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.6);
+        }
+
+        .upgrades {
+            text-align: left;
+        }
+
+        .upgrades h3 {
+            color: #333;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .upgrade-button {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: none;
+            background: #f0f0f0;
+            color: #333;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .upgrade-button:hover {
+            background: #e0e0e0;
+        }
+
+        .upgrade-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .per-second {
+            color: #999;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>🎮 Clicker Game</h1>
+        <div class="score">Score: <span id="score">0</span></div>
+
+        <button class="click-button" id="clickBtn">CLICK!</button>
+
+        <div class="per-second">
+            Earning: <span id="perSecond">0</span> per second
+        </div>
+
+        <div class="upgrades">
+            <h3>Upgrades</h3>
+            <button class="upgrade-button" id="upgrade1">
+                👆 Double Click Power<br>
+                Cost: <span id="cost1">10</span>
+            </button>
+            <button class="upgrade-button" id="upgrade2">
+                ⚡ Auto Clicker<br>
+                Cost: <span id="cost2">50</span>
+            </button>
+            <button class="upgrade-button" id="upgrade3">
+                🚀 Mega Clicker<br>
+                Cost: <span id="cost3">200</span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let score = 0;
+        let clickPower = 1;
+        let autoClickRate = 0;
+        let upgrade1Count = 0;
+        let upgrade2Count = 0;
+        let upgrade3Count = 0;
+
+        const clickBtn = document.getElementById('clickBtn');
+        const scoreDisplay = document.getElementById('score');
+        const perSecondDisplay = document.getElementById('perSecond');
+        const upgrade1Btn = document.getElementById('upgrade1');
+        const upgrade2Btn = document.getElementById('upgrade2');
+        const upgrade3Btn = document.getElementById('upgrade3');
+
+        const upgrade1Cost = 10;
+        const upgrade2Cost = 50;
+        const upgrade3Cost = 200;
+
+        clickBtn.addEventListener('click', () => {
+            score += clickPower;
+            updateDisplay();
+            animateClick();
+        });
+
+        upgrade1Btn.addEventListener('click', () => {
+            if (score >= upgrade1Cost) {
+                score -= upgrade1Cost;
+                upgrade1Count++;
+                clickPower += 1;
+                updateDisplay();
+            }
+        });
+
+        upgrade2Btn.addEventListener('click', () => {
+            if (score >= upgrade2Cost) {
+                score -= upgrade2Cost;
+                upgrade2Count++;
+                autoClickRate += 1;
+                updateDisplay();
+            }
+        });
+
+        upgrade3Btn.addEventListener('click', () => {
+            if (score >= upgrade3Cost) {
+                score -= upgrade3Cost;
+                upgrade3Count++;
+                autoClickRate += 5;
+                updateDisplay();
+            }
+        });
+
+        function updateDisplay() {
+            scoreDisplay.textContent = score;
+            perSecondDisplay.textContent = autoClickRate;
+            document.getElementById('cost1').textContent = upgrade1Cost;
+            document.getElementById('cost2').textContent = upgrade2Cost;
+            document.getElementById('cost3').textContent = upgrade3Cost;
+
+            upgrade1Btn.disabled = score < upgrade1Cost;
+            upgrade2Btn.disabled = score < upgrade2Cost;
+            upgrade3Btn.disabled = score < upgrade3Cost;
+        }
+
+        function animateClick() {
+            clickBtn.style.transform = 'scale(0.9)';
+            setTimeout(() => {
+                clickBtn.style.transform = 'scale(1)';
+            }, 100);
+        }
+
+        setInterval(() => {
+            if (autoClickRate > 0) {
+                score += autoClickRate;
+                updateDisplay();
+            }
+        }, 1000);
+
+        updateDisplay();
+    </script>
+</body>
+</html>
