@@ -126,7 +126,7 @@ renderer.shadowMap.type = THREE.PCFShadowShadowMap;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000510); // deep space
-scene.fog = new THREE.Fog(0x000510, 60, 150); // distant platform edges dissolve into space
+scene.fog = new THREE.Fog(0x000510, 40, 85); // heavy fog at spawn zone fades to background
 
 // Steep angled overview (more overhead, less forward) looking into the field.
 // Camera sits high & above the player side; the WALL (Z=0) lands near the BOTTOM
@@ -452,12 +452,12 @@ for (let i = 0; i < 200; i++) {
   const mesh = new THREE.Mesh(bulletGeo, bulletMatP);
   mesh.visible = false; mesh.castShadow = true;
   scene.add(mesh);
-  bulletPool.push({ mesh, active: false, vx: 0, vz: 0, dmg: 0, life: 0, pierce: 0, hitEnemies: new Set(), isMain: false });
+  bulletPool.push({ mesh, active: false, vx: 0, vz: 0, dmg: 0, life: 0, pierce: 0, pierceLevel: 0, hitEnemies: new Set(), isMain: false });
 }
 function spawnBullet(x, y, z, dx, dz, speed, dmg, isPlayer) {
   for (const b of bulletPool) {
     if (b.active) continue;
-    b.active = true; b.dmg = dmg; b.life = 2.4; b.pierce = game.pierce; b.isMain = isPlayer;
+    b.active = true; b.dmg = dmg; b.life = 2.4; b.pierce = game.pierce; b.pierceLevel = game.pierce; b.isMain = isPlayer;
     b.vx = dx * speed; b.vz = dz * speed;
     b.hitEnemies.clear();
     b.mesh.material = isPlayer ? bulletMatP : bulletMatA;
@@ -938,11 +938,11 @@ function update(dt) {
       if (b.hitEnemies.has(j)) continue;
       const rr = e.r + 0.4;
       if ((bx - e.x) ** 2 + (bz - e.z) ** 2 <= rr * rr) {
-        const dmg = b.pierce > 0 ? b.dmg * 0.6 : b.dmg;
+        const isFirstHit = b.hitEnemies.size === 0;
+        const dmg = isFirstHit ? b.dmg : (b.dmg * b.pierceLevel * 0.2);
         e.hp -= dmg;
         e.hitFlash = 0.08;
         burst(bx, e.r, bz, e.eyeColor, 3, 4, 0.14);
-        const isFirstHit = b.hitEnemies.size === 0;
         if (b.isMain && isFirstHit) mainBulletsHit++;
         b.hitEnemies.add(j);
         if (e.hp <= 0) {
