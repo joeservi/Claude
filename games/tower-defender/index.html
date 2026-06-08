@@ -101,7 +101,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
-const HALF_W = 15, SPAWN_Z = -67, WALL_Z = -15, MAX_YAW = Math.PI / 2, BULLET_SPEED = 46, AUTO_BULLET_SPEED = 42;
+const HALF_W = 15, SPAWN_Z = -52, WALL_Z = 0, MAX_YAW = Math.PI / 2, BULLET_SPEED = 46, AUTO_BULLET_SPEED = 42;
 const TOWER_DMG_SCALE = 1.0; // Tower damage = enemy remaining HP (1:1)
 let soundEnabled = true;
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -135,7 +135,7 @@ scene.fog = new THREE.Fog(0x000510, 55, 110); // fog fades spawn zone into backg
 // the portrait width with a small cushion while the whole battlefield stays in frame.
 const camera = new THREE.PerspectiveCamera(74, 1, 0.1, 220);
 camera.position.set(0, 52, 9); // MUCH closer zoom (50% from original)
-camera.lookAt(0, 2, -42);
+camera.lookAt(0, 2, -32);
 
 let composer, bloom;
 function buildComposer(w, h) {
@@ -241,7 +241,7 @@ function makeBrickTexture(w, h) {
 
 // Battlefield platform — only cover the playable area (between the cyan rails).
 // Everything outside fades to space background. Platform floats in space.
-const PLAT_W = 36, PLAT_L = 68, PLAT_H = 3.4, PLAT_CZ = -41;
+const PLAT_W = 36, PLAT_L = 85, PLAT_H = 3.4, PLAT_CZ = -27;
 const groundMat = new THREE.MeshStandardMaterial({ map: makeGroundTexture(256, 256), roughness: 0.85, metalness: 0.08 });
 groundMat.map.repeat.set(5, 9); groundMat.map.wrapS = groundMat.map.wrapT = THREE.RepeatWrapping;
 const edgeMat = new THREE.MeshStandardMaterial({ color: 0x0a1422, roughness: 0.92, metalness: 0.4, emissive: 0x08101e, emissiveIntensity: 0.5 });
@@ -517,7 +517,7 @@ function spawnEnemy() {
   const r = Math.max(1.2, Math.min(4.2, 1.0 * Math.cbrt(hp)));
 
   // Speed: smaller enemies are faster; speeds increase significantly each wave
-  const baseSpeed = 5.0 + game.wave * 0.35;
+  const baseSpeed = 5.0 + game.wave * 0.6;
   const speed = baseSpeed * (1.9 / (r + 0.7));
 
   // Shape & color tier based on HP
