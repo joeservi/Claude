@@ -101,7 +101,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
-const HALF_W = 15, SPAWN_Z = -52, WALL_Z = 0, MAX_YAW = Math.PI / 2, BULLET_SPEED = 46, AUTO_BULLET_SPEED = 42;
+const HALF_W = 15, SPAWN_Z = -70, WALL_Z = 0, MAX_YAW = Math.PI / 2, BULLET_SPEED = 46, AUTO_BULLET_SPEED = 42;
 const TOWER_DMG_SCALE = 1.0; // Tower damage = enemy remaining HP (1:1)
 let soundEnabled = true;
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -126,7 +126,7 @@ renderer.shadowMap.type = THREE.PCFShadowShadowMap;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000510); // deep space
-scene.fog = new THREE.Fog(0x000510, 55, 110); // fog fades spawn zone into background
+scene.fog = new THREE.Fog(0x000510, 45, 100); // fog fades in from spawn zone
 
 // Steep angled overview (more overhead, less forward) looking into the field.
 // Camera sits high & above the player side; the WALL (Z=0) lands near the BOTTOM
@@ -259,8 +259,8 @@ for (const sx of [-1, 1]) {
 
 const railMat = new THREE.MeshBasicMaterial({ color: 0x3effff });
 for (const sx of [-1, 1]) {
-  const rail = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.8, 64), railMat);
-  rail.position.set(sx * HALF_W, 0.4, -30); scene.add(rail);
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.8, PLAT_L), railMat);
+  rail.position.set(sx * (PLAT_W/2), 0.4, PLAT_CZ); scene.add(rail);
 }
 
 // Starfield with subtle twinkling. Twinkle driven by shader based on position and time.
@@ -517,7 +517,7 @@ function spawnEnemy() {
   const r = Math.max(1.2, Math.min(4.2, 1.0 * Math.cbrt(hp)));
 
   // Speed: smaller enemies are faster; speeds increase significantly each wave
-  const baseSpeed = 5.0 + game.wave * 0.6;
+  const baseSpeed = 5.0 + game.wave * 0.45;
   const speed = baseSpeed * (1.9 / (r + 0.7));
 
   // Shape & color tier based on HP
@@ -612,7 +612,7 @@ function calculateWaveDurationExact(queue, wave) {
   if (queue.length === 0) return 0;
 
   const spawnInterval = Math.max(0.3, 0.9 - wave * 0.02);
-  const baseSpeed = 5.0 + wave * 0.35;
+  const baseSpeed = 5.0 + wave * 0.45;
 
   let maxCompletionTime = 0;
 
@@ -622,7 +622,8 @@ function calculateWaveDurationExact(queue, wave) {
     const enemySpeed = baseSpeed * (1.9 / (radius + 0.7));
 
     const spawnTime = i * spawnInterval;
-    const travelTime = 52 / enemySpeed;
+    const travelDistance = Math.abs(WALL_Z - SPAWN_Z);
+    const travelTime = travelDistance / enemySpeed;
     const completionTime = spawnTime + travelTime;
 
     maxCompletionTime = Math.max(maxCompletionTime, completionTime);
