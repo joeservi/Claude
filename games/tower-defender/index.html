@@ -263,25 +263,6 @@ for (const sx of [-1, 1]) {
   rail.position.set(sx * HALF_W, 0.4, -30); scene.add(rail);
 }
 
-// Fade overlay at the top (far end) of the battlefield so it dissolves into space background
-const fadeGeo = new THREE.PlaneGeometry(PLAT_W * 1.2, 20);
-const fadeCanvas = document.createElement('canvas');
-fadeCanvas.width = 256; fadeCanvas.height = 256;
-const fadeCtx = fadeCanvas.getContext('2d');
-const grad = fadeCtx.createLinearGradient(0, 0, 0, 256);
-grad.addColorStop(0, 'rgba(0, 5, 16, 1)');     // bottom: solid dark
-grad.addColorStop(0.6, 'rgba(0, 5, 16, 0.3)'); // middle: fading
-grad.addColorStop(1, 'rgba(0, 5, 16, 0)');     // top: transparent to space
-fadeCtx.fillStyle = grad;
-fadeCtx.fillRect(0, 0, 256, 256);
-const fadeTex = new THREE.CanvasTexture(fadeCanvas);
-const fadeMat = new THREE.MeshBasicMaterial({ map: fadeTex, transparent: true, depthWrite: false, fog: false });
-const fadeOverlay = new THREE.Mesh(fadeGeo, fadeMat);
-fadeOverlay.position.set(0, 3, SPAWN_Z + 2);
-fadeOverlay.rotation.x = -Math.PI / 2;
-fadeOverlay.scale.z = 1.5;
-scene.add(fadeOverlay);
-
 // Starfield with subtle twinkling. Twinkle driven by shader based on position and time.
 const starLayers = [];
 (() => {
@@ -1190,7 +1171,7 @@ function renderUpgrades() {
     else lvlLine = `<span class="lvl">Lv ${lvl}${maxed?'':' → '+(lvl+1)}</span>`;
     let desc = u.desc;
     if (isPierce) {
-      desc = `Secondary damage +${(game.lv.pierce + 1) * 20}%`;
+      desc = `${game.lv.pierce * 20}% secondary damage`;
     }
     btn.innerHTML = `<span class="cost">${right}</span><span class="name">${u.name}</span>${lvlLine}<br><span style="color:#8aa0c8;font-size:11px">${desc}</span>`;
     btn.onclick = () => {
